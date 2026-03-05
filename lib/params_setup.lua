@@ -72,8 +72,9 @@ function Params.init(G)
     params:add{type = "control", id = "m3_ping_dcy", name = "Ping Decay", controlspec = controlspec.new(0.01, 2.0, 'exp', 0.01, 0.1, "s"), action = function(x) if not G.booting then engine.m3_ping_dcy(x) end end}
     params:add{type = "control", id = "m3_voct_amt", name = "V/Oct Amount", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m3_voct_amt(x) end end}
     params:add{type = "trigger", id = "m3_ping", name = "Ping", action = function() if not G.booting then engine.m3_ping() end end}
+    params:add{type = "option", id = "m3_range", name = "VCFQ Range", options = {"HI", "LO"}, default = 1, action = function(x) if not G.booting then engine.m3_range(x - 1) end end}
     add_node_params(21, 28)
-
+    
     params:add_group("MOD 4: 1005 MODAMP", 16)
     params:add{type = "control", id = "m4_mod_gain", name = "MOD Gain", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m4_mod_gain(x) end end}
     params:add{type = "control", id = "m4_unmod_gain", name = "UNMOD Gain", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m4_unmod_gain(x) end end}
@@ -87,9 +88,8 @@ function Params.init(G)
 
     for i=1, 5 do
         local m = "m" .. (4+i)
-        params:add_group("MOD " .. (4+i) .. ": CYBER VCA " .. i, 10)
+        params:add_group("MOD " .. (4+i) .. ": CYBER VCA " .. i, 9)
         params:add{type = "control", id = m.."_init_gain", name = "Initial Gain", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine[m.."_init_gain"](x) end end}
-        params:add{type = "control", id = m.."_cv_amt", name = "CV Amount", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine[m.."_cv_amt"](x) end end}
         params:add{type = "control", id = m.."_env_slew", name = "Env Slew", controlspec = controlspec.new(0.01, 2.0, 'exp', 0.01, 0.1, "s"), action = function(x) if not G.booting then engine[m.."_env_slew"](x) end end}
         params:add{type = "control", id = m.."_env_gain", name = "Env Gain", controlspec = controlspec.new(0.0, 5.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine[m.."_env_gain"](x) end end}
         params:add{type = "option", id = m.."_vca_curve", name = "VCA Curve", options = {"LIN", "EXP"}, default = 1, action = function(x) if not G.booting then engine[m.."_vca_curve"](x - 1) end end}
