@@ -1,4 +1,7 @@
--- lib/grid_ui.lua v0.504
+-- lib/grid_ui.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX FATAL: Implementado Safe 2D Indexing estricto en key() y redraw() para evitar crasheos por hardware no estándar.
+
 local GridUI = {}
 
 GridUI.cache = {}
@@ -46,37 +49,40 @@ function GridUI.key(G, g, x, y, z)
         return
     end
 
-    local node = G.grid_map[x][y]
+    -- SAFE 2D INDEXING
+    local node = G.grid_map[x] and G.grid_map[x][y]
     local is_menu = (y == 4)
 
     if z == 1 then
         table.insert(GridUI.held_nodes, {x=x, y=y, time=util.time(), node=node, is_menu=is_menu})
         if is_menu then
             local module_idx = G.module_by_col[x]
-            local first_col = x
-            while first_col > 1 and G.module_by_col[first_col - 1] == module_idx do first_col = first_col - 1 end
-            local rel_col = x - first_col + 1
-            local pages = {"A", "B", "C", "D"}
-            G.focus.page = pages[rel_col]
-            G.focus.module_id = module_idx
-            G.focus.state = "menu"
+            if module_idx then
+                local first_col = x
+                while first_col > 1 and G.module_by_col[first_col - 1] == module_idx do first_col = first_col - 1 end
+                local rel_col = x - first_col + 1
+                local pages = {"A", "B", "C", "D"}
+                G.focus.page = pages[rel_col]
+                G.focus.module_id = module_idx
+                G.focus.state = "menu"
+            end
         elseif node and node.type ~= "dummy" then
             G.focus.state = node.type; G.focus.node_x = x; G.focus.node_y = y
             if G.shift_held then
                 GridUI.disconnect_timer = clock.run(function()
                     clock.sleep(1.0); local Matrix = include('lib/matrix')
-                    if node.type == "out" then for dst = 1, 64 do if G.patch[node.id][dst].active then G.patch[node.id][dst].active = false; if Matrix.disconnect then Matrix.disconnect(node.id, dst, G) else Matrix.update_destination(dst, G) end end end
-                    elseif node.type == "in" then for src = 1, 64 do if G.patch[src][node.id].active then G.patch[src][node.id].active = false; if Matrix.disconnect then Matrix.disconnect(src, node.id, G) else Matrix.update_destination(node.id, G) end end end end
+                    if node.type == "out" then for dst = 1, 66 do if G.patch[node.id] and G.patch[node.id][dst] and G.patch[node.id][dst].active then G.patch[node.id][dst].active = false; if Matrix.disconnect then Matrix.disconnect(node.id, dst, G) else Matrix.update_destination(dst, G) end end end
+                    elseif node.type == "in" then for src = 1, 66 do if G.patch[src] and G.patch[src][node.id] and G.patch[src][node.id].active then G.patch[src][node.id].active = false; if Matrix.disconnect then Matrix.disconnect(src, node.id, G) else Matrix.update_destination(node.id, G) end end end end
                     G.screen_dirty = true; GridUI.disconnect_timer = nil
                 end)
             elseif #GridUI.held_nodes == 2 then
                 local n1 = GridUI.held_nodes[1].node; local n2 = GridUI.held_nodes[2].node
                 if n1 and n2 and n1.type ~= n2.type and n1.type ~= "dummy" and n2.type ~= "dummy" then
                     local src = (n1.type == "out") and n1 or n2; local dst = (n1.type == "in") and n1 or n2; local Matrix = include('lib/matrix')
-                    if G.patch[src.id][dst.id].active then
+                    if G.patch[src.id] and G.patch[src.id][dst.id] and G.patch[src.id][dst.id].active then
                         GridUI.disconnect_timer = clock.run(function() clock.sleep(1.0); G.patch[src.id][dst.id].active = false; if Matrix.disconnect then Matrix.disconnect(src.id, dst.id, G) else Matrix.update_destination(dst.id, G) end; G.screen_dirty = true; GridUI.disconnect_timer = nil end)
                     else
-                        G.patch[src.id][dst.id].active = true; if Matrix.connect then Matrix.connect(src.id, dst.id, G) else Matrix.update_destination(dst.id, G) end
+                        if G.patch[src.id] and G.patch[src.id][dst.id] then G.patch[src.id][dst.id].active = true; if Matrix.connect then Matrix.connect(src.id, dst.id, G) else Matrix.update_destination(dst.id, G) end end
                     end
                     G.focus.state = "patching"
                 end
@@ -93,7 +99,7 @@ end
 function GridUI.redraw(G, g)
     if not g then return end
     GridUI.refresh_counter = GridUI.refresh_counter + 1
-    if GridUI.refresh_counter > 60 then for x = 1, 16 do for y = 1, 8 do GridUI.cache[x][y] = -1 end end; GridUI.refresh_counter = 0 end
+    if GridUI.refresh_counter > 60 then for x = 1, 16 do for y = 1, 8 do if GridUI.cache[x] then GridUI.cache[x][y] = -1 end end end; GridUI.refresh_counter = 0 end
 
     for x = 1, 16 do
         for y = 1, 8 do
@@ -103,12 +109,13 @@ function GridUI.redraw(G, g)
                 elseif x == 2 then
                     if G.learn_mode then b = (math.floor(util.time() * 4) % 2 == 0) and 15 or 4; G.screen_dirty = true else b = G.shift_held and 4 or 0 end
                 elseif x >= 3 and x <= 8 then
-                    local snap_id = x - 2; if G.active_snap == snap_id then b = 11 elseif G.snapshots[snap_id].has_data then b = 7 else b = 1 end
+                    local snap_id = x - 2; if G.active_snap == snap_id then b = 11 elseif G.snapshots[snap_id] and G.snapshots[snap_id].has_data then b = 7 else b = 1 end
                 end
             else
                 local module_idx = G.module_by_col[x]
-                local is_even_module = (module_idx % 2 == 0)
-                local node = G.grid_map[x][y]
+                local is_even_module = module_idx and (module_idx % 2 == 0) or false
+                -- SAFE 2D INDEXING
+                local node = G.grid_map[x] and G.grid_map[x][y]
                 local is_menu = (y == 4)
                 
                 if (node and node.type ~= "dummy") or is_menu then
@@ -116,19 +123,19 @@ function GridUI.redraw(G, g)
                     for _, h in ipairs(GridUI.held_nodes) do
                         if h.x == x and h.y == y then b = 15
                         elseif h.node and node then
-                            if h.node.type == "out" and node.type == "in" and G.patch[h.node.id][node.id].active then b = 10
-                            elseif h.node.type == "in" and node.type == "out" and G.patch[node.id][h.node.id].active then b = 10 end
+                            if h.node.type == "out" and node.type == "in" and G.patch[h.node.id] and G.patch[h.node.id][node.id] and G.patch[h.node.id][node.id].active then b = 10
+                            elseif h.node.type == "in" and node.type == "out" and G.patch[node.id] and G.patch[node.id][h.node.id] and G.patch[node.id][h.node.id].active then b = 10 end
                         end
                     end
                     if node and G.focus.state == "idle" and b ~= 15 and b ~= 10 then
                         local has_connection = false
-                        if node.type == "out" then for dst = 1, 64 do if G.patch[node.id] and G.patch[node.id][dst] and G.patch[node.id][dst].active then has_connection = true; break end end
-                        elseif node.type == "in" then for src = 1, 64 do if G.patch[src] and G.patch[src][node.id] and G.patch[src][node.id].active then has_connection = true; break end end end
+                        if node.type == "out" then for dst = 1, 66 do if G.patch[node.id] and G.patch[node.id][dst] and G.patch[node.id][dst].active then has_connection = true; break end end
+                        elseif node.type == "in" then for src = 1, 66 do if G.patch[src] and G.patch[src][node.id] and G.patch[src][node.id].active then has_connection = true; break end end end
                         if has_connection then b = math.max(b, 8) end 
                     end
                 end
             end
-            if GridUI.cache[x][y] ~= b then g:led(x, y, b); GridUI.cache[x][y] = b end
+            if GridUI.cache[x] and GridUI.cache[x][y] ~= b then g:led(x, y, b); GridUI.cache[x][y] = b end
         end
     end
     g:refresh()
