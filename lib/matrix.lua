@@ -1,6 +1,6 @@
--- lib/matrix.lua v0.508
--- CHANGELOG v0.508:
--- 1. FIX: Inyección de fallbacks (or 0.0) en params:get para evitar nils durante el boot.
+-- lib/matrix.lua v0.510
+-- CHANGELOG v0.510:
+-- 1. OPTIMIZACIÓN: Mapeo cruzado de IDs de Lua a índices TX/RX de SuperCollider.
 
 local Matrix = {}
 
@@ -11,34 +11,52 @@ local function evaluate_row_pause(dst_id, G)
             active_count = active_count + 1
         end
     end
-    if active_count == 0 then engine.pause_matrix_row(dst_id - 1) else engine.resume_matrix_row(dst_id - 1) end
+    local dst_node = G.nodes[dst_id]
+    if dst_node and dst_node.type == "in" then
+        if active_count == 0 then engine.pause_matrix_row(dst_node.rx_idx - 1) else engine.resume_matrix_row(dst_node.rx_idx - 1) end
+    end
 end
 
 function Matrix.connect(src_id, dst_id, G)
     if G.patch[src_id] and G.patch[src_id][dst_id] then
         G.patch[src_id][dst_id].active = true; G.patch[src_id][dst_id].current_gain = 1.0
-        engine.resume_matrix_row(dst_id - 1); engine.patch_set(dst_id, src_id, 1.0)
+        local src_node = G.nodes[src_id]; local dst_node = G.nodes[dst_id]
+        if src_node and dst_node and src_node.type == "out" and dst_node.type == "in" then
+            engine.resume_matrix_row(dst_node.rx_idx - 1); engine.patch_set(dst_node.rx_idx, src_node.tx_idx, 1.0)
+        end
     end
 end
 
 function Matrix.disconnect(src_id, dst_id, G)
     if G.patch[src_id] and G.patch[src_id][dst_id] then
         G.patch[src_id][dst_id].active = false; G.patch[src_id][dst_id].current_gain = 0.0
-        engine.patch_set(dst_id, src_id, 0.0); evaluate_row_pause(dst_id, G)
+        local src_node = G.nodes[src_id]; local dst_node = G.nodes[dst_id]
+        if src_node and dst_node and src_node.type == "out" and dst_node.type == "in" then
+            engine.patch_set(dst_node.rx_idx, src_node.tx_idx, 0.0); evaluate_row_pause(dst_id, G)
+        end
     end
 end
 
 function Matrix.init(G)
     for dst_id = 1, 66 do
-        local has_active = false; local row_vals = {}
-        for src_id = 1, 66 do
-            local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
-            if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0 end
-            row_vals[src_id] = is_active and 1.0 or 0.0
-            if is_active then has_active = true end
+        local dst_node = G.nodes[dst_id]
+        if dst_node and dst_node.type == "in" then
+            local has_active = false; local row_vals = {}
+            for i = 1, 34 do row_vals[i] = 0.0 end
+            
+            for src_id = 1, 66 do
+                local src_node = G.nodes[src_id]
+                if src_node and src_node.type == "out" then
+                    local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
+                    local gain = is_active and 1.0 or 0.0
+                    if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].current_gain = gain end
+                    row_vals[src_node.tx_idx] = gain
+                    if is_active then has_active = true end
+                end
+            end
+            engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
+            if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
         end
-        engine.patch_row_set(dst_id, table.concat(row_vals, ","))
-        if has_active then engine.resume_matrix_row(dst_id - 1) else engine.pause_matrix_row(dst_id - 1) end
     end
     
     for i = 1, 66 do
