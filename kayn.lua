@@ -1,6 +1,8 @@
--- kayn.lua v0.507
--- CHANGELOG v0.507:
--- 1. FIX FATAL: Expansión de bucles de matriz a 66 iteraciones para soportar la nueva topología.
+-- kayn.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX FATAL: Eliminación de includes dinámicos. Carga estática en scope global.
+-- 2. FIX FATAL: Protección de callbacks asíncronos (OSC/MIDI) contra nils durante el boot.
+-- 3. FIX: Orden de inicialización estricto.
 
 engine.name = 'Kayn'
 
@@ -8,19 +10,13 @@ print("========================================")
 print("KAYN DEBUG: INICIANDO CARGA DE MÓDULOS")
 print("========================================")
 
-local G, GridUI, ScreenUI, Matrix, Params, Storage, Sixteen
-
-local function load_dependencies()
-    G = include('lib/globals')
-    GridUI = include('lib/grid_ui')
-    ScreenUI = include('lib/screen_ui')
-    Matrix = include('lib/matrix')
-    Params = include('lib/params_setup')
-    Storage = include('lib/storage')
-    Sixteen = include('lib/16n')
-end
-
-load_dependencies()
+local G = include('lib/globals')
+local GridUI = include('lib/grid_ui')
+local ScreenUI = include('lib/screen_ui')
+local Matrix = include('lib/matrix')
+local Params = include('lib/params_setup')
+local Storage = include('lib/storage')
+local Sixteen = include('lib/16n')
 
 g = grid.connect()
 
@@ -28,6 +24,7 @@ local grid_metro
 local screen_metro
 
 osc.event = function(path, args, from)
+    if not G or G.booting then return end
     if path == '/kayn_levels' then
         if not G.node_levels then G.node_levels = {} end
         for i = 1, 66 do G.node_levels[i] = args[i + 2] or 0 end
@@ -37,15 +34,22 @@ end
 
 function init()
     G.booting = true
-    pcall(G.init_nodes)
-    pcall(Params.init, G)
+    
+    -- 1. Estructuras de Datos
+    G.init_nodes()
+    
+    -- 2. Registro de Parámetros
+    Params.init(G)
     
     params.action_write = function(filename, name, number) Storage.save(G, number) end
     params.action_read = function(filename, silent, number) Storage.load(G, number) end
     
+    -- 3. Params Default (Carga el PSET y hace el Deep Merge)
     params:default()
-    pcall(Matrix.init, G)
-    pcall(GridUI.init, G)
+    
+    -- 4. Envío de datos a SC y UI
+    Matrix.init(G)
+    GridUI.init(G)
     
     grid_metro = metro.init()
     grid_metro.time = 1/30
@@ -60,7 +64,7 @@ function init()
     screen_metro:start()
     
     Sixteen.init(function(msg)
-        if G.booting then return end
+        if not G or G.booting then return end
         if G.morph_percent and G.morph_percent >= 0 and G.morph_percent < 100 then return end
 
         local slider_id = Sixteen.cc_2_slider_id(msg.cc)
@@ -154,6 +158,7 @@ function init()
         G.fader_last_raw[slider_id] = raw_val
     end)
     
+    -- 5. Bang Final
     params:bang()
     pcall(function() engine.set_morph_lag(0.05) end)
     G.booting = false
