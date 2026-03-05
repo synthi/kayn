@@ -1,8 +1,11 @@
--- lib/storage.lua v0.504
+-- lib/storage.lua v0.507
+-- CHANGELOG v0.507:
+-- 1. FIX FATAL: Expansión de bucles a 66 iteraciones.
+
 local Storage = {}
 local Matrix = include('lib/matrix')
 
-local param_blacklist = {["morph_time"] = true, ["m10_master_vol"] = true}
+local param_blacklist = {["morph_time"] = true,["m10_master_vol"] = true}
 
 function Storage.get_filename(pset_number)
     local name = string.format("%02d", pset_number)
@@ -30,9 +33,9 @@ function Storage.load(G, pset_number)
             if data.patch then
                 G.patch = data.patch
                 clock.run(function()
-                    for dst_id = 1, 64 do
+                    for dst_id = 1, 66 do
                         local has_active = false; local row_vals = {}
-                        for src_id = 1, 64 do
+                        for src_id = 1, 66 do
                             local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
                             G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
                             row_vals[src_id] = is_active and 1.0 or 0.0
@@ -42,7 +45,7 @@ function Storage.load(G, pset_number)
                         if has_active then engine.resume_matrix_row(dst_id - 1) else engine.pause_matrix_row(dst_id - 1) end
                         clock.sleep(0.002)
                     end
-                    for i = 1, 64 do
+                    for i = 1, 66 do
                         local node = G.nodes[i]
                         if node then
                             node.level = params:get("node_lvl_" .. i)
@@ -82,9 +85,9 @@ function Storage.load_snapshot(G, snap_id)
     
     if morph_time <= 0.05 then
         for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
-        for dst_id = 1, 64 do
+        for dst_id = 1, 66 do
             local has_active = false; local row_vals = {}
-            for src_id = 1, 64 do
+            for src_id = 1, 66 do
                 local is_active = target.patch[src_id][dst_id].active
                 G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
                 row_vals[src_id] = is_active and 1.0 or 0.0
@@ -98,9 +101,9 @@ function Storage.load_snapshot(G, snap_id)
         local start_params = {}
         for p_id, _ in pairs(target.params) do if params.lookup[p_id] then start_params[p_id] = params:get(p_id) end end
         local start_patch = {}
-        for src_id = 1, 64 do
+        for src_id = 1, 66 do
             start_patch[src_id] = {}
-            for dst_id = 1, 64 do
+            for dst_id = 1, 66 do
                 local current = G.patch[src_id][dst_id].current_gain
                 if not current then current = G.patch[src_id][dst_id].active and 1.0 or 0.0 end
                 start_patch[src_id][dst_id] = current
@@ -108,9 +111,9 @@ function Storage.load_snapshot(G, snap_id)
             end
         end
         local start_time = util.time()
-        for dst_id = 1, 64 do
+        for dst_id = 1, 66 do
             local needs_row = false
-            for src_id = 1, 64 do if start_patch[src_id][dst_id] > 0 or target.patch[src_id][dst_id].active then needs_row = true end end
+            for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or target.patch[src_id][dst_id].active then needs_row = true end end
             if needs_row then engine.resume_matrix_row(dst_id - 1) end
         end
         pcall(function() engine.set_morph_lag(0.1) end)
@@ -121,9 +124,9 @@ function Storage.load_snapshot(G, snap_id)
                 G.morph_percent = progress * 100 
                 if progress >= 1.0 then
                     for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
-                    for dst_id = 1, 64 do
+                    for dst_id = 1, 66 do
                         local has_active = false; local row_vals = {}
-                        for src_id = 1, 64 do
+                        for src_id = 1, 66 do
                             local is_active = target.patch[src_id][dst_id].active
                             G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
                             row_vals[src_id] = is_active and 1.0 or 0.0
@@ -151,9 +154,9 @@ function Storage.load_snapshot(G, snap_id)
                         end
                     end
                 end
-                for dst_id = 1, 64 do
+                for dst_id = 1, 66 do
                     local row_changed = false; local row_vals = {}
-                    for src_id = 1, 64 do
+                    for src_id = 1, 66 do
                         local start_val = start_patch[src_id][dst_id]; local end_active = target.patch[src_id][dst_id].active
                         local end_val = end_active and 1.0 or 0.0; local current_val = start_val
                         if start_val ~= end_val then
