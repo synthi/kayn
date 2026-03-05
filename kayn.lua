@@ -1,8 +1,6 @@
--- kayn.lua v0.508
--- CHANGELOG v0.508:
--- 1. FIX FATAL: Eliminación de includes dinámicos. Carga estática en scope global.
--- 2. FIX FATAL: Protección de callbacks asíncronos (OSC/MIDI) contra nils durante el boot.
--- 3. FIX: Orden de inicialización estricto.
+-- kayn.lua v0.510
+-- CHANGELOG v0.510:
+-- 1. OPTIMIZACIÓN: Mapeo cruzado de niveles OSC (TX/RX) a IDs de Lua.
 
 engine.name = 'Kayn'
 
@@ -27,7 +25,16 @@ osc.event = function(path, args, from)
     if not G or G.booting then return end
     if path == '/kayn_levels' then
         if not G.node_levels then G.node_levels = {} end
-        for i = 1, 66 do G.node_levels[i] = args[i + 2] or 0 end
+        for i = 1, 66 do
+            local node = G.nodes[i]
+            if node then
+                if node.type == "out" then
+                    G.node_levels[i] = args[2 + node.tx_idx] or 0
+                elseif node.type == "in" then
+                    G.node_levels[i] = args[2 + 34 + node.rx_idx] or 0
+                end
+            end
+        end
         G.screen_dirty = true
     end
 end
@@ -35,19 +42,14 @@ end
 function init()
     G.booting = true
     
-    -- 1. Estructuras de Datos
     G.init_nodes()
-    
-    -- 2. Registro de Parámetros
     Params.init(G)
     
     params.action_write = function(filename, name, number) Storage.save(G, number) end
     params.action_read = function(filename, silent, number) Storage.load(G, number) end
     
-    -- 3. Params Default (Carga el PSET y hace el Deep Merge)
     params:default()
     
-    -- 4. Envío de datos a SC y UI
     Matrix.init(G)
     GridUI.init(G)
     
@@ -158,7 +160,6 @@ function init()
         G.fader_last_raw[slider_id] = raw_val
     end)
     
-    -- 5. Bang Final
     params:bang()
     pcall(function() engine.set_morph_lag(0.05) end)
     G.booting = false
