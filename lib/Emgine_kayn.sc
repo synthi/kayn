@@ -1,9 +1,10 @@
-// lib/Engine_Kayn.sc v0.510
-// CHANGELOG v0.510:
-// 1. OPTIMIZACIÓN FATAL: Separación de buses TX (34) y RX (32). Total: 66 buses (Evita el límite de 128 de Norns).
-// 2. OPTIMIZACIÓN: Reducción de multiplicaciones de matriz de 4356 a 1088.
-// 3. FEATURE: S&H Clock conmutable entre INT, EXT y BOTH.
-// 4. FIX: Master Out L/R ahora escriben simultáneamente en la matriz y en el hardware físico.
+// lib/Engine_Kayn.sc v0.511
+// CHANGELOG v0.511:
+// 1. DSP: Multiplicadores exponenciales ajustados a 10 octavas por 5V (Estándar Serge/Buchla).
+// 2. DSP: VCA EXP mode ahora usa una curva logarítmica real de 60dB/V.
+// 3. DSP: Envelope Follower ajustado a 10V p-p (Peak Voltage).
+// 4. DSP: Eliminado parámetro redundante cv_amt en VCAs.
+// 5. DSP: Añadido switch HI/LO en VCFQ.
 
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
@@ -71,7 +72,7 @@ Engine_Kayn : CroneEngine {
             
             fm1_in = Lag.ar(InFeedback.ar(in_fm1) * In.kr(lvl_fm1), 0.0001);
             pv1 = Lag.ar(InFeedback.ar(in_pv1) * In.kr(lvl_pv1), 0.0001);
-            exp_core1 = K2A.ar(Select.kr(range1,[tune1, tune1*0.001]) + fine1) * (2.0 ** (pv1 * pv1_mode * 5.0));
+            exp_core1 = K2A.ar(Select.kr(range1,[tune1, tune1*0.001]) + fine1) * (2.0 ** (pv1 * pv1_mode * 10.0));
             freq1 = (exp_core1 + (fm1_in * (1 - fm1_mode) * 1000.0)).max(0.0);
             ph1 = Phasor.ar(0, freq1 * SampleDur.ir, 0, 1);
             tri1 = LeakDC.ar((ph1 * 2 - 1).abs * 2 - 1);
@@ -84,7 +85,7 @@ Engine_Kayn : CroneEngine {
             
             fm2_in = Lag.ar(InFeedback.ar(in_fm2) * In.kr(lvl_fm2), 0.0001);
             pv2 = Lag.ar(InFeedback.ar(in_pv2) * In.kr(lvl_pv2), 0.0001);
-            exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001]) + fine2) * (2.0 ** (pv2 * pv2_mode * 5.0));
+            exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001]) + fine2) * (2.0 ** (pv2 * pv2_mode * 10.0));
             freq2 = (exp_core2 + (fm2_in * (1 - fm2_mode) * 1000.0)).max(0.0);
             ph2 = Phasor.ar(0, freq2 * SampleDur.ir, 0, 1);
             tri2 = LeakDC.ar((ph2 * 2 - 1).abs * 2 - 1);
@@ -131,12 +132,12 @@ Engine_Kayn : CroneEngine {
             rate_cv = InFeedback.ar(in_rate) * In.kr(lvl_rate);
             cycle_state = LocalIn.ar(1);
             actual_in = Select.ar(K2A.ar(cycle_mode),[slew_in, cycle_state]);
-            smooth_out = Slew.ar(actual_in, 1.0 / (rise * (2.0 ** ((mod_rise + rate_cv) * 5.0))).max(0.001), 1.0 / (fall * (2.0 ** ((mod_fall + rate_cv) * 5.0))).max(0.001));
+            smooth_out = Slew.ar(actual_in, 1.0 / (rise * (2.0 ** ((mod_rise + rate_cv) * 10.0))).max(0.001), 1.0 / (fall * (2.0 ** ((mod_fall + rate_cv) * 10.0))).max(0.001));
             cycle_trig = Schmidt.ar(smooth_out, 0.01, 0.99);
             next_state = 1.0 - cycle_trig;
             LocalOut.ar(next_state);
             
-            clk_int = Impulse.ar((clk_rate * (2.0 ** (mod_clk * 5.0))).clip(0.01, 1000));
+            clk_int = Impulse.ar((clk_rate * (2.0 ** (mod_clk * 10.0))).clip(0.01, 1000));
             clk_ext = Schmidt.ar(InFeedback.ar(in_trig) * In.kr(lvl_trig), clk_thresh, clk_thresh + 0.1);
             clk_trig = Select.ar(K2A.ar(clk_mode),[clk_int, clk_ext, clk_int + clk_ext]);
             
@@ -157,7 +158,7 @@ Engine_Kayn : CroneEngine {
         SynthDef(\Kayn_VCFQ, {
             arg in_aud, in_fm, in_ping, in_res, out_lp, out_bp, out_hp, out_notch,
                 lvl_aud, lvl_fm, lvl_ping, lvl_res, lvl_lp, lvl_bp, lvl_hp, lvl_notch,
-                cutoff=1000, fine=0, q=1, agc_drive=1.0, fm_amt=1.0, notch_bal=0.5, ping_dcy=0.1, voct_amt=1.0, t_ping=0, phys_bus, shaper_buf;
+                cutoff=1000, fine=0, q=1, agc_drive=1.0, fm_amt=1.0, notch_bal=0.5, ping_dcy=0.1, voct_amt=1.0, t_ping=0, range=0, phys_bus, shaper_buf;
                 
             var morph_lag = In.kr(phys_bus + 7);
             var aud, fm, res_cv, ping_trig, ping_env, exciter, f_mod;
@@ -173,8 +174,9 @@ Engine_Kayn : CroneEngine {
             ping_env = EnvGen.ar(Env.perc(0.001, ping_dcy), ping_trig);
             exciter = Decay.ar(K2A.ar(ping_trig), 0.01) * 5.0;
             
-            f_mod = (K2A.ar(cutoff) + fine) * (2.0 ** (fm * fm_amt * 5.0)) * (2.0 ** (ping_env * 2.0));
-            f_mod = f_mod.clip(10, 20000);
+            f_mod = (K2A.ar(cutoff) + fine) * (2.0 ** (fm * fm_amt * 10.0)) * (2.0 ** (ping_env * 2.0));
+            f_mod = f_mod * Select.kr(range, [1.0, 0.01]);
+            f_mod = f_mod.clip(0.1, 20000);
             
             bp_fb = LocalIn.ar(1);
             bp_amp = Amplitude.ar(bp_fb, 0.001, 0.05);
@@ -224,7 +226,7 @@ Engine_Kayn : CroneEngine {
             
             core_sig = XFade2.ar(car * unmod_gain * 1.2, rm_sig * mod_gain, state_smooth * 2 - 1);
             vca_env = (vca_base + vca_cv).clip(0, 1);
-            vca_final = LinXFade2.ar(vca_env, vca_env.squared, vca_resp * 2 - 1);
+            vca_final = LinXFade2.ar(vca_env, (vca_env * 60.0 - 60.0).dbamp, vca_resp * 2 - 1);
             final_sig = (core_sig * vca_final * 1.5).clip(-1.0, 1.0);
             
             Out.ar(out_main, Shaper.ar(shaper_buf, final_sig) * In.kr(lvl_main));
@@ -235,21 +237,21 @@ Engine_Kayn : CroneEngine {
 
         SynthDef(\Kayn_CyberVCA, {
             arg in_aud, in_cv, out_aud, out_env, lvl_aud, lvl_cv, lvl_oaud, lvl_oenv,
-                init_gain=0, cv_amt=1, env_slew=0.1, env_gain=1, vca_curve=0, env_src_sel=0, phys_bus, shaper_buf;
+                init_gain=0, env_slew=0.1, env_gain=1, vca_curve=0, env_src_sel=0, phys_bus, shaper_buf;
             var morph_lag = In.kr(phys_bus + 7);
             var aud_in, cv_in, vca_env, vca_final, aud_out, env_src, env_out;
             
-            init_gain = Lag.kr(init_gain, morph_lag); cv_amt = Lag.kr(cv_amt, morph_lag); env_slew = Lag.kr(env_slew, morph_lag); env_gain = Lag.kr(env_gain, morph_lag);
+            init_gain = Lag.kr(init_gain, morph_lag); env_slew = Lag.kr(env_slew, morph_lag); env_gain = Lag.kr(env_gain, morph_lag);
             
             aud_in = InFeedback.ar(in_aud) * In.kr(lvl_aud);
             cv_in = Lag.ar(InFeedback.ar(in_cv) * In.kr(lvl_cv), 0.0001);
             
-            vca_env = (init_gain + (cv_in * cv_amt)).clip(0, 1);
-            vca_final = LinXFade2.ar(vca_env, vca_env.squared, vca_curve * 2 - 1);
+            vca_env = (init_gain + cv_in).clip(0, 1);
+            vca_final = LinXFade2.ar(vca_env, (vca_env * 60.0 - 60.0).dbamp, vca_curve * 2 - 1);
             aud_out = aud_in * vca_final;
             
             env_src = Select.ar(K2A.ar(env_src_sel),[aud_in, aud_out]);
-            env_out = (Amplitude.ar(env_src, 0.001, env_slew) * env_gain).clip(0.0, 2.0);
+            env_out = (Amplitude.ar(env_src, 0.001, env_slew) * env_gain * 2.0).clip(0.0, 2.0);
             
             Out.ar(out_aud, Shaper.ar(shaper_buf, aud_out.clip(-1.0, 1.0)) * In.kr(lvl_oaud));
             Out.ar(out_env, env_out * In.kr(lvl_oenv));
@@ -295,11 +297,11 @@ Engine_Kayn : CroneEngine {
             mr = Pan2.ar((InFeedback.ar(in_mr) * In.kr(lvl_mr)) * (1.0 + vca_mod_r).clip(0, 2), (In.kr(pan_mr) + pan_mod_r).clip(-1, 1));
             sum = (ml + mr) * drive;
             
-            filt_l = DFM1.ar(sum[0], (cut_l * (2.0 ** (cut_mod_l * 5.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
-            filt_r = DFM1.ar(sum[1], (cut_r * (2.0 ** (cut_mod_r * 5.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
+            filt_l = DFM1.ar(sum[0], (cut_l * (2.0 ** (cut_mod_l * 10.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
+            filt_r = DFM1.ar(sum[1], (cut_r * (2.0 ** (cut_mod_r * 10.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
             
             byp = K2A.ar(filt_byp);
-            filt_sig_l = Select.ar(byp, [filt_l, sum[0]]);
+            filt_sig_l = Select.ar(byp,[filt_l, sum[0]]);
             filt_sig_r = Select.ar(byp,[filt_r, sum[1]]);
             filt_sig =[filt_sig_l, filt_sig_r];
             
@@ -364,7 +366,7 @@ Engine_Kayn : CroneEngine {
         this.addCommand("m2_clk_rate", "f", { |msg| synth_mods[1].set(\clk_rate, msg[1]) }); this.addCommand("m2_prob_skew", "f", { |msg| synth_mods[1].set(\prob_skew, msg[1]) }); this.addCommand("m2_glide", "f", { |msg| synth_mods[1].set(\glide, msg[1]) }); this.addCommand("m2_clk_thresh", "f", { |msg| synth_mods[1].set(\clk_thresh, msg[1]) }); this.addCommand("m2_clk_mode", "i", { |msg| synth_mods[1].set(\clk_mode, msg[1]) });
 
         // M3: VCFQ
-        this.addCommand("m3_cutoff", "f", { |msg| synth_mods[2].set(\cutoff, msg[1]) }); this.addCommand("m3_fine", "f", { |msg| synth_mods[2].set(\fine, msg[1]) }); this.addCommand("m3_q", "f", { |msg| synth_mods[2].set(\q, msg[1]) }); this.addCommand("m3_agc_drive", "f", { |msg| synth_mods[2].set(\agc_drive, msg[1]) }); this.addCommand("m3_ping", "", { synth_mods[2].set(\t_ping, 1) });
+        this.addCommand("m3_cutoff", "f", { |msg| synth_mods[2].set(\cutoff, msg[1]) }); this.addCommand("m3_fine", "f", { |msg| synth_mods[2].set(\fine, msg[1]) }); this.addCommand("m3_q", "f", { |msg| synth_mods[2].set(\q, msg[1]) }); this.addCommand("m3_agc_drive", "f", { |msg| synth_mods[2].set(\agc_drive, msg[1]) }); this.addCommand("m3_ping", "", { synth_mods[2].set(\t_ping, 1) }); this.addCommand("m3_range", "i", { |msg| synth_mods[2].set(\range, msg[1]) });
         this.addCommand("m3_fm_amt", "f", { |msg| synth_mods[2].set(\fm_amt, msg[1]) }); this.addCommand("m3_notch_bal", "f", { |msg| synth_mods[2].set(\notch_bal, msg[1]) }); this.addCommand("m3_ping_dcy", "f", { |msg| synth_mods[2].set(\ping_dcy, msg[1]) }); this.addCommand("m3_voct_amt", "f", { |msg| synth_mods[2].set(\voct_amt, msg[1]) });
 
         // M4: 1005
@@ -375,7 +377,6 @@ Engine_Kayn : CroneEngine {
         5.do { |i|
             var m = "m" ++ (5+i);
             this.addCommand(m ++ "_init_gain", "f", { |msg| synth_mods[4+i].set(\init_gain, msg[1]) });
-            this.addCommand(m ++ "_cv_amt", "f", { |msg| synth_mods[4+i].set(\cv_amt, msg[1]) });
             this.addCommand(m ++ "_env_slew", "f", { |msg| synth_mods[4+i].set(\env_slew, msg[1]) });
             this.addCommand(m ++ "_env_gain", "f", { |msg| synth_mods[4+i].set(\env_gain, msg[1]) });
             this.addCommand(m ++ "_vca_curve", "i", { |msg| synth_mods[4+i].set(\vca_curve, msg[1]) });
