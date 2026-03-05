@@ -1,9 +1,11 @@
--- lib/globals.lua v0.507
--- CHANGELOG v0.507:
--- 1. FIX FATAL: Expansión de la matriz a 66x66 para acomodar todos los nodos de Kayn sin desbordamiento.
+-- lib/globals.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX: Declaración local estricta en la primera línea.
+-- 2. FIX: Pre-inicialización segura de variables de estado para evitar nils.
 
 local G = {}
 
+G.booting = true
 G.screen_dirty = true
 G.node_levels = {}
 for i = 1, 66 do G.node_levels[i] = 0 end
@@ -28,8 +30,7 @@ G.learn_mode = false
 G.last_touched_param = nil
 G.ui_text_state = { text = "KAYN CYBERNETICS", level = 4, timer = 0, is_fader = false }
 
-G.fine_link = {["m1_tune1"] = "m1_fine1", ["m1_tune2"] = "m1_fine2",["m3_cutoff"] = "m3_fine"
-}
+G.fine_link = {["m1_tune1"] = "m1_fine1",["m1_tune2"] = "m1_fine2",["m3_cutoff"] = "m3_fine"}
 
 G.patch = {}
 G.nodes = {}
@@ -91,7 +92,7 @@ function G.init_nodes()
     add_node(15, 7, "out", 10, "Tape Send L"); add_node(16, 7, "out", 10, "Tape Send R")
     add_node(15, 8, "out", 10, "ADC Out L"); add_node(16, 8, "out", 10, "ADC Out R")
 
-    for src = 1, 66 do G.patch[src] = {}; for dst = 1, 66 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0 } end end
+    for src = 1, 66 do G.patch[src] = {}; for dst = 1, 66 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0, current_gain = 0.0 } end end
 end
 
 return G
