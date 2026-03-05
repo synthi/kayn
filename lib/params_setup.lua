@@ -1,7 +1,6 @@
--- lib/params_setup.lua v0.507
--- CHANGELOG v0.507:
--- 1. FIX FATAL: Recálculo exacto de los contadores de grupos para evitar el error "cannot nest GROUPs".
--- 2. FIX FATAL: Rango de add_node_params del Nexus ajustado a (57, 66).
+-- lib/params_setup.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX: Declaración local estricta en la primera línea.
 
 local Params = {}
 
