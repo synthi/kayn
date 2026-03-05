@@ -1,6 +1,6 @@
--- lib/storage.lua v0.508
--- CHANGELOG v0.508:
--- 1. FIX FATAL: Implementado Deep Merge en load() y load_snapshot() para evitar Topology Mismatch (crasheo por matrices antiguas).
+-- lib/storage.lua v0.510
+-- CHANGELOG v0.510:
+-- 1. OPTIMIZACIÓN: Mapeo cruzado de IDs de Lua a índices TX/RX en la carga y morphing.
 
 local Storage = {}
 local Matrix = include('lib/matrix')
@@ -32,7 +32,6 @@ function Storage.load(G, pset_number)
             for i = 1, 16 do G.fader_latched[i] = false end
             
             if data.patch then
-                -- DEEP MERGE: Evita destruir la matriz de 66x66 con una antigua de 64x64
                 for src_id = 1, 66 do
                     if data.patch[src_id] then
                         for dst_id = 1, 66 do
@@ -48,16 +47,25 @@ function Storage.load(G, pset_number)
                 
                 clock.run(function()
                     for dst_id = 1, 66 do
-                        local has_active = false; local row_vals = {}
-                        for src_id = 1, 66 do
-                            local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
-                            if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0 end
-                            row_vals[src_id] = is_active and 1.0 or 0.0
-                            if is_active then has_active = true end
+                        local dst_node = G.nodes[dst_id]
+                        if dst_node and dst_node.type == "in" then
+                            local has_active = false; local row_vals = {}
+                            for i = 1, 34 do row_vals[i] = 0.0 end
+                            
+                            for src_id = 1, 66 do
+                                local src_node = G.nodes[src_id]
+                                if src_node and src_node.type == "out" then
+                                    local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
+                                    local gain = is_active and 1.0 or 0.0
+                                    if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].current_gain = gain end
+                                    row_vals[src_node.tx_idx] = gain
+                                    if is_active then has_active = true end
+                                end
+                            end
+                            engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
+                            if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
+                            clock.sleep(0.002)
                         end
-                        engine.patch_row_set(dst_id, table.concat(row_vals, ","))
-                        if has_active then engine.resume_matrix_row(dst_id - 1) else engine.pause_matrix_row(dst_id - 1) end
-                        clock.sleep(0.002)
                     end
                     for i = 1, 66 do
                         local node = G.nodes[i]
@@ -100,17 +108,25 @@ function Storage.load_snapshot(G, snap_id)
     if morph_time <= 0.05 then
         for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
         for dst_id = 1, 66 do
-            local has_active = false; local row_vals = {}
-            for src_id = 1, 66 do
-                local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
-                if G.patch[src_id] and G.patch[src_id][dst_id] then
-                    G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+            local dst_node = G.nodes[dst_id]
+            if dst_node and dst_node.type == "in" then
+                local has_active = false; local row_vals = {}
+                for i = 1, 34 do row_vals[i] = 0.0 end
+                
+                for src_id = 1, 66 do
+                    local src_node = G.nodes[src_id]
+                    if src_node and src_node.type == "out" then
+                        local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
+                        if G.patch[src_id] and G.patch[src_id][dst_id] then
+                            G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                        end
+                        row_vals[src_node.tx_idx] = is_active and 1.0 or 0.0
+                        if is_active then has_active = true end
+                    end
                 end
-                row_vals[src_id] = is_active and 1.0 or 0.0
-                if is_active then has_active = true end
+                engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
+                if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
             end
-            engine.patch_row_set(dst_id, table.concat(row_vals, ","))
-            if has_active then engine.resume_matrix_row(dst_id - 1) else engine.pause_matrix_row(dst_id - 1) end
         end
         G.screen_dirty = true
     else
@@ -129,9 +145,12 @@ function Storage.load_snapshot(G, snap_id)
         end
         local start_time = util.time()
         for dst_id = 1, 66 do
-            local needs_row = false
-            for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
-            if needs_row then engine.resume_matrix_row(dst_id - 1) end
+            local dst_node = G.nodes[dst_id]
+            if dst_node and dst_node.type == "in" then
+                local needs_row = false
+                for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
+                if needs_row then engine.resume_matrix_row(dst_node.rx_idx - 1) end
+            end
         end
         pcall(function() engine.set_morph_lag(0.1) end)
         
@@ -142,17 +161,25 @@ function Storage.load_snapshot(G, snap_id)
                 if progress >= 1.0 then
                     for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
                     for dst_id = 1, 66 do
-                        local has_active = false; local row_vals = {}
-                        for src_id = 1, 66 do
-                            local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
-                            if G.patch[src_id] and G.patch[src_id][dst_id] then
-                                G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                        local dst_node = G.nodes[dst_id]
+                        if dst_node and dst_node.type == "in" then
+                            local has_active = false; local row_vals = {}
+                            for i = 1, 34 do row_vals[i] = 0.0 end
+                            
+                            for src_id = 1, 66 do
+                                local src_node = G.nodes[src_id]
+                                if src_node and src_node.type == "out" then
+                                    local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
+                                    if G.patch[src_id] and G.patch[src_id][dst_id] then
+                                        G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                                    end
+                                    row_vals[src_node.tx_idx] = is_active and 1.0 or 0.0
+                                    if is_active then has_active = true end
+                                end
                             end
-                            row_vals[src_id] = is_active and 1.0 or 0.0
-                            if is_active then has_active = true end
+                            engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
+                            if not has_active then engine.pause_matrix_row(dst_node.rx_idx - 1) end
                         end
-                        engine.patch_row_set(dst_id, table.concat(row_vals, ","))
-                        if not has_active then engine.pause_matrix_row(dst_id - 1) end
                     end
                     pcall(function() engine.set_morph_lag(0.05) end) 
                     G.morph_percent = 100; G.morph_text_timer = util.time() + 1.0; G.screen_dirty = true; G.morph_coroutine = nil
@@ -174,20 +201,28 @@ function Storage.load_snapshot(G, snap_id)
                     end
                 end
                 for dst_id = 1, 66 do
-                    local row_changed = false; local row_vals = {}
-                    for src_id = 1, 66 do
-                        local start_val = start_patch[src_id][dst_id]
-                        local end_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
-                        local end_val = end_active and 1.0 or 0.0; local current_val = start_val
-                        if start_val ~= end_val then
-                            current_val = start_val + ((end_val - start_val) * progress)
-                            if G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain ~= current_val then 
-                                G.patch[src_id][dst_id].current_gain = current_val; row_changed = true 
+                    local dst_node = G.nodes[dst_id]
+                    if dst_node and dst_node.type == "in" then
+                        local row_changed = false; local row_vals = {}
+                        for i = 1, 34 do row_vals[i] = 0.0 end
+                        
+                        for src_id = 1, 66 do
+                            local src_node = G.nodes[src_id]
+                            if src_node and src_node.type == "out" then
+                                local start_val = start_patch[src_id][dst_id]
+                                local end_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
+                                local end_val = end_active and 1.0 or 0.0; local current_val = start_val
+                                if start_val ~= end_val then
+                                    current_val = start_val + ((end_val - start_val) * progress)
+                                    if G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain ~= current_val then 
+                                        G.patch[src_id][dst_id].current_gain = current_val; row_changed = true 
+                                    end
+                                end
+                                row_vals[src_node.tx_idx] = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain or 0.0
                             end
                         end
-                        row_vals[src_id] = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain or 0.0
+                        if row_changed then engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ",")) end
                     end
-                    if row_changed then engine.patch_row_set(dst_id, table.concat(row_vals, ",")) end
                 end
                 G.screen_dirty = true; clock.sleep(1/30)
             end
