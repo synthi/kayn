@@ -43,7 +43,7 @@ function Params.init(G)
     params:add{type = "option", id = "m1_out4_wave", name = "Osc 2 Multi Wave", options = {"SINE", "TRI", "SAW", "SQR", "PULSE"}, default = 1, action = function(x) if not G.booting then engine.m1_out4_wave(x - 1) end end}
     add_node_params(1, 8)
 
-    params:add_group("MOD 2: STOCHASTIC CORE", 27)
+    params:add_group("MOD 2: STOCHASTIC CORE", 28)
     params:add{type = "option", id = "m2_cv1_dest", name = "CV 1 Dest", options = {"RISE", "FALL", "CLOCK", "SLOW", "MORPH"}, default = 1, action = function(x) if not G.booting then engine.m2_cv1_dest(x - 1) end end}
     params:add{type = "option", id = "m2_cv2_dest", name = "CV 2 Dest", options = {"RISE", "FALL", "CLOCK", "SLOW", "MORPH"}, default = 2, action = function(x) if not G.booting then engine.m2_cv2_dest(x - 1) end end}
     params:add{type = "control", id = "m2_tilt1", name = "Noise 1 Tilt", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_tilt1(x) end end}
@@ -56,6 +56,7 @@ function Params.init(G)
     params:add{type = "control", id = "m2_slew_shape", name = "Slew Shape", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_slew_shape(x) end end}
     params:add{type = "option", id = "m2_cycle_mode", name = "Cycle Mode", options = {"OFF", "ON"}, default = 1, action = function(x) if not G.booting then engine.m2_cycle_mode(x - 1) end end}
     params:add{type = "control", id = "m2_clk_rate", name = "Internal Clock", controlspec = controlspec.new(0.1, 50.0, 'exp', 0.01, 2.0, "Hz"), action = function(x) if not G.booting then engine.m2_clk_rate(x) end end}
+    params:add{type = "option", id = "m2_clk_mode", name = "S&H Clock", options = {"INT", "EXT", "BOTH"}, default = 1, action = function(x) if not G.booting then engine.m2_clk_mode(x - 1) end end}
     params:add{type = "control", id = "m2_prob_skew", name = "Probability Skew", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_prob_skew(x) end end}
     params:add{type = "control", id = "m2_glide", name = "S&H Glide", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_glide(x) end end}
     params:add{type = "control", id = "m2_clk_thresh", name = "Clock Threshold", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.001, 0.1), action = function(x) if not G.booting then engine.m2_clk_thresh(x) end end}
