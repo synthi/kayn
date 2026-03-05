@@ -1,6 +1,7 @@
--- lib/screen_ui.lua v0.507
--- CHANGELOG v0.507:
--- 1. FIX FATAL: Corrección de coordenadas Y para respetar la ergonomía E1(30), E2(45), E3(60).
+-- lib/screen_ui.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX FATAL: Implementado Pre-Init Redraw Trap estricto.
+-- 2. FIX FATAL: Safe 2D Indexing en draw_node_menu y enc/key.
 
 local ScreenUI = {}
 ScreenUI.ping_flash = {[3] = 0}
@@ -13,8 +14,7 @@ local MenuDef = {
     [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_cv_amt", name="CV AMT"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, e4 = {id="m5_env_gain", name="ENV GAIN"}, k2 = {id="m5_vca_curve", name="CRV"}, k3 = {id="m5_env_src_sel", name="SRC"} } },[6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_cv_amt", name="CV AMT"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, e4 = {id="m6_env_gain", name="ENV GAIN"}, k2 = {id="m6_vca_curve", name="CRV"}, k3 = {id="m6_env_src_sel", name="SRC"} } },
     [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_cv_amt", name="CV AMT"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, e4 = {id="m7_env_gain", name="ENV GAIN"}, k2 = {id="m7_vca_curve", name="CRV"}, k3 = {id="m7_env_src_sel", name="SRC"} } },
     [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_cv_amt", name="CV AMT"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, e4 = {id="m8_env_gain", name="ENV GAIN"}, k2 = {id="m8_vca_curve", name="CRV"}, k3 = {id="m8_env_src_sel", name="SRC"} } },
-    [9] = { A = { title = "CYBER VCA 5", e1 = {id="m9_cv_amt", name="CV AMT"}, e2 = {id="m9_init_gain", name="BIAS"}, e3 = {id="m9_env_slew", name="ENV DCY"}, e4 = {id="m9_env_gain", name="ENV GAIN"}, k2 = {id="m9_vca_curve", name="CRV"}, k3 = {id="m9_env_src_sel", name="SRC"} } },
-    [10] = { A = { title = "NEXUS MASTER", e1 = {id="m10_res", name="RES"}, e2 = {id="m10_cut_l", name="VCF L"}, e3 = {id="m10_cut_r", name="VCF R"}, k2 = {id="m10_filt_byp", name="FILT"}, k3 = {id="m10_adc_mon", name="ADC"} }, B = { title = "NEXUS TAPE", e1 = {id="m10_tape_mix", name="MIX"}, e2 = {id="m10_tape_time", name="TIME"}, e3 = {id="m10_tape_fb", name="FDBK"}, e4 = {id="m10_wow", name="W&F"}, k2 = {id="m10_tape_sat", name="SAT"}, k3 = {id="m10_tape_mute", name="MUTE"} } }
+    [9] = { A = { title = "CYBER VCA 5", e1 = {id="m9_cv_amt", name="CV AMT"}, e2 = {id="m9_init_gain", name="BIAS"}, e3 = {id="m9_env_slew", name="ENV DCY"}, e4 = {id="m9_env_gain", name="ENV GAIN"}, k2 = {id="m9_vca_curve", name="CRV"}, k3 = {id="m9_env_src_sel", name="SRC"} } },[10] = { A = { title = "NEXUS MASTER", e1 = {id="m10_res", name="RES"}, e2 = {id="m10_cut_l", name="VCF L"}, e3 = {id="m10_cut_r", name="VCF R"}, k2 = {id="m10_filt_byp", name="FILT"}, k3 = {id="m10_adc_mon", name="ADC"} }, B = { title = "NEXUS TAPE", e1 = {id="m10_tape_mix", name="MIX"}, e2 = {id="m10_tape_time", name="TIME"}, e3 = {id="m10_tape_fb", name="FDBK"}, e4 = {id="m10_wow", name="W&F"}, k2 = {id="m10_tape_sat", name="SAT"}, k3 = {id="m10_tape_mute", name="MUTE"} } }
 }
 
 local function register_touch(G, param_id)
@@ -155,7 +155,7 @@ function ScreenUI.draw_module_menu(G)
 end
 
 function ScreenUI.draw(G)
-    if not G or not G.grid_map or not G.nodes then return end
+    if not G or not G.grid_map or not G.nodes or not G.focus then return end
     if G.focus.state == "idle" or G.focus.state == "patching" then ScreenUI.draw_idle(G)
     elseif G.focus.state == "in" or G.focus.state == "out" then ScreenUI.draw_node_menu(G)
     elseif G.focus.state == "menu" then ScreenUI.draw_module_menu(G) end
@@ -163,6 +163,7 @@ end
 
 local last_enc_time = 0
 function ScreenUI.enc(G, n, d)
+    if not G or not G.focus then return end
     local now = util.time(); local dt = now - last_enc_time; last_enc_time = now
     local accel = 1.0; if dt < 0.05 then accel = 5.0 elseif dt > 0.15 then accel = 0.1 end 
 
@@ -197,6 +198,7 @@ function ScreenUI.enc(G, n, d)
 end
 
 function ScreenUI.key(G, n, z)
+    if not G or not G.focus then return end
     if z == 1 then
         if G.focus.state == "in" or G.focus.state == "out" then
             if not G.focus.node_x or not G.focus.node_y then return end
