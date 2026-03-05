@@ -1,7 +1,8 @@
-// lib/Engine_Kayn.sc v0.505
-// CHANGELOG v0.504:
-// 1. FIX FATAL: Corregidos los índices de los buses de audio para los Cyber VCAs (36 a 45) y el Nexus (56 a 63).
-// 2. FIX: Comando OSC del Nexus apuntado correctamente a synth_mods[9].
+// lib/Engine_Kayn.sc v0.506
+// CHANGELOG v0.506:
+// 1. FIX FATAL: Eliminado el uso de '==' en Select.ar dentro de Kayn_Nexus. Reemplazado por InRange.ar.
+// 2. FIX FATAL: Corregido error de rate mismatch (LinExp.kr -> LinExp.ar) en el cálculo físico de la cinta.
+// 3. FIX FATAL: Corregida la expansión multicanal estéreo en el bypass del filtro del Nexus.
 
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
@@ -269,8 +270,8 @@ Engine_Kayn : CroneEngine {
                 cv_dest_l=0, cv_dest_r=0, phys_bus, shaper_buf, master_shaper_buf;
                 
             var morph_lag = In.kr(phys_bus + 7);
-            var cv_l, cv_r, vca_mod_l, vca_mod_r, pan_mod_l, pan_mod_r, cut_mod_l, cut_mod_r, time_mod, fb_mod;
-            var ml, mr, adc, sum, filt_l, filt_r, filt_sig, tape_in, tape_dt, tape_raw, tape_sat_sig, tape_out, master, final_out;
+            var cv_l, cv_r, dest_l, dest_r, vca_mod_l, vca_mod_r, pan_mod_l, pan_mod_r, cut_mod_l, cut_mod_r, time_mod_l, time_mod_r, fb_mod_l, fb_mod_r, time_mod, fb_mod;
+            var ml, mr, adc, sum, filt_l, filt_r, byp, filt_sig_l, filt_sig_r, filt_sig, tape_in, tape_dt, tape_raw, tape_sat_sig, tape_out, master, final_out;
             
             cut_l = Lag.kr(cut_l, morph_lag); cut_r = Lag.kr(cut_r, morph_lag); res = Lag.kr(res, morph_lag);
             tape_time = Lag.kr(tape_time, morph_lag); tape_fb = Lag.kr(tape_fb, morph_lag); tape_mix = Lag.kr(tape_mix, morph_lag);
@@ -279,11 +280,24 @@ Engine_Kayn : CroneEngine {
             cv_l = InFeedback.ar(in_al) * In.kr(lvl_al);
             cv_r = InFeedback.ar(in_ar) * In.kr(lvl_ar);
             
-            vca_mod_l = Select.ar(K2A.ar(cv_dest_l)==0,[DC.ar(0.0), cv_l]); vca_mod_r = Select.ar(K2A.ar(cv_dest_r)==0,[DC.ar(0.0), cv_r]);
-            pan_mod_l = Select.ar(K2A.ar(cv_dest_l)==1,[DC.ar(0.0), cv_l]); pan_mod_r = Select.ar(K2A.ar(cv_dest_r)==1,[DC.ar(0.0), cv_r]);
-            cut_mod_l = Select.ar(K2A.ar(cv_dest_l)==2,[DC.ar(0.0), cv_l]); cut_mod_r = Select.ar(K2A.ar(cv_dest_r)==2,[DC.ar(0.0), cv_r]);
-            time_mod = Select.ar(K2A.ar(cv_dest_l)==3,[DC.ar(0.0), cv_l]) + Select.ar(K2A.ar(cv_dest_r)==3,[DC.ar(0.0), cv_r]);
-            fb_mod = Select.ar(K2A.ar(cv_dest_l)==4,[DC.ar(0.0), cv_l]) + Select.ar(K2A.ar(cv_dest_r)==4,[DC.ar(0.0), cv_r]);
+            // FIX FATAL: Ruteo CV seguro sin usar '=='
+            dest_l = K2A.ar(cv_dest_l);
+            dest_r = K2A.ar(cv_dest_r);
+            
+            vca_mod_l = cv_l * (dest_l < 0.5);
+            pan_mod_l = cv_l * InRange.ar(dest_l, 0.5, 1.5);
+            cut_mod_l = cv_l * InRange.ar(dest_l, 1.5, 2.5);
+            time_mod_l = cv_l * InRange.ar(dest_l, 2.5, 3.5);
+            fb_mod_l = cv_l * (dest_l > 3.5);
+            
+            vca_mod_r = cv_r * (dest_r < 0.5);
+            pan_mod_r = cv_r * InRange.ar(dest_r, 0.5, 1.5);
+            cut_mod_r = cv_r * InRange.ar(dest_r, 1.5, 2.5);
+            time_mod_r = cv_r * InRange.ar(dest_r, 2.5, 3.5);
+            fb_mod_r = cv_r * (dest_r > 3.5);
+            
+            time_mod = time_mod_l + time_mod_r;
+            fb_mod = fb_mod_l + fb_mod_r;
             
             ml = Pan2.ar((InFeedback.ar(in_ml) * In.kr(lvl_ml)) * (1.0 + vca_mod_l).clip(0, 2), (In.kr(pan_ml) + pan_mod_l).clip(-1, 1));
             mr = Pan2.ar((InFeedback.ar(in_mr) * In.kr(lvl_mr)) * (1.0 + vca_mod_r).clip(0, 2), (In.kr(pan_mr) + pan_mod_r).clip(-1, 1));
@@ -291,13 +305,20 @@ Engine_Kayn : CroneEngine {
             
             filt_l = DFM1.ar(sum[0], (cut_l * (2.0 ** (cut_mod_l * 5.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
             filt_r = DFM1.ar(sum[1], (cut_r * (2.0 ** (cut_mod_r * 5.0))).clip(20, 18000), res, 1.0, 0.0, 0.0005);
-            filt_sig = Select.ar(K2A.ar(filt_byp), [[filt_l, filt_r], sum]);
+            
+            // FIX FATAL: Expansión multicanal segura
+            byp = K2A.ar(filt_byp);
+            filt_sig_l = Select.ar(byp, [filt_l, sum[0]]);
+            filt_sig_r = Select.ar(byp,[filt_r, sum[1]]);
+            filt_sig =[filt_sig_l, filt_sig_r];
             
             tape_in = filt_sig + (LocalIn.ar(2) * (tape_fb + fb_mod).clip(0, 1.2));
             tape_dt = (Lag3.kr(tape_time, 0.5) + time_mod).clip(0.01, 6.1);
             tape_raw = DelayC.ar(tape_in, 6.2, tape_dt);
             tape_sat_sig = (tape_raw + (Delay1.ar(tape_raw) * 0.2)).tanh;
-            tape_out = LPF.ar(tape_sat_sig, LinExp.kr(tape_dt.max(0.01), 0.01, 6.0, 15000, 1500));
+            
+            // FIX FATAL: LinExp.ar para señales de audio
+            tape_out = LPF.ar(tape_sat_sig, LinExp.ar(tape_dt.max(0.01), 0.01, 6.0, 15000, 1500));
             LocalOut.ar(tape_out); 
             
             adc = SoundIn.ar([0, 1]) * K2A.ar(adc_mon);
@@ -320,13 +341,11 @@ Engine_Kayn : CroneEngine {
         synth_mods[2] = Synth.new(\Kayn_VCFQ,[\in_aud, bus_nodes_rx.index+10, \in_fm, bus_nodes_rx.index+11, \in_ping, bus_nodes_rx.index+12, \in_res, bus_nodes_rx.index+13, \out_lp, bus_nodes_tx.index+10, \out_bp, bus_nodes_tx.index+11, \out_hp, bus_nodes_tx.index+12, \out_notch, bus_nodes_tx.index+13, \lvl_aud, bus_levels.index+10, \lvl_fm, bus_levels.index+11, \lvl_ping, bus_levels.index+12, \lvl_res, bus_levels.index+13, \lvl_lp, bus_levels.index+10, \lvl_bp, bus_levels.index+11, \lvl_hp, bus_levels.index+12, \lvl_notch, bus_levels.index+13, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         synth_mods[3] = Synth.new(\Kayn_1005,[\in_car, bus_nodes_rx.index+14, \in_mod, bus_nodes_rx.index+15, \in_vca, bus_nodes_rx.index+16, \in_gate, bus_nodes_rx.index+17, \out_main, bus_nodes_tx.index+14, \out_rm, bus_nodes_tx.index+15, \out_sum, bus_nodes_tx.index+16, \out_diff, bus_nodes_tx.index+17, \lvl_car, bus_levels.index+14, \lvl_mod, bus_levels.index+15, \lvl_vca, bus_levels.index+16, \lvl_gate, bus_levels.index+17, \lvl_main, bus_levels.index+14, \lvl_rm, bus_levels.index+15, \lvl_sum, bus_levels.index+16, \lvl_diff, bus_levels.index+17, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
-        // ANOTACIÓN PARA EL EQUIPO: Índices de buses corregidos para los Cyber VCAs (36 a 45)
         5.do { |i|
             var rx_idx = 36 + (i * 2); var tx_idx = 36 + (i * 2);
             synth_mods[4+i] = Synth.new(\Kayn_CyberVCA,[\in_aud, bus_nodes_rx.index+rx_idx, \in_cv, bus_nodes_rx.index+rx_idx+1, \out_aud, bus_nodes_tx.index+tx_idx, \out_env, bus_nodes_tx.index+tx_idx+1, \lvl_aud, bus_levels.index+rx_idx, \lvl_cv, bus_levels.index+rx_idx+1, \lvl_oaud, bus_levels.index+tx_idx, \lvl_oenv, bus_levels.index+tx_idx+1, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         };
         
-        // ANOTACIÓN PARA EL EQUIPO: Índices de buses corregidos para el Nexus (56 a 63)
         synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+56, \in_mr, bus_nodes_rx.index+57, \in_al, bus_nodes_rx.index+58, \in_ar, bus_nodes_rx.index+59, \out_ml, context.out_b.index, \out_mr, context.out_b.index+1, \out_tl, bus_nodes_tx.index+60, \out_tr, bus_nodes_tx.index+61, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+56, \lvl_omr, bus_levels.index+57, \lvl_otl, bus_levels.index+60, \lvl_otr, bus_levels.index+61, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
 
         this.addCommand("patch_set", "iif", { |msg| matrix_state[msg[1]-1][msg[2]-1] = msg[3]; synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
