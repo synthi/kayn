@@ -1,7 +1,6 @@
--- lib/globals.lua v0.508
--- CHANGELOG v0.508:
--- 1. FIX: Declaración local estricta en la primera línea.
--- 2. FIX: Pre-inicialización segura de variables de estado para evitar nils.
+-- lib/globals.lua v0.510
+-- CHANGELOG v0.510:
+-- 1. OPTIMIZACIÓN: Inyección de tx_idx y rx_idx en los nodos para mapeo cruzado con SuperCollider.
 
 local G = {}
 
@@ -42,10 +41,19 @@ G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP
 function G.init_nodes()
     for x = 1, 16 do G.grid_map[x] = {}; for y = 1, 8 do G.grid_map[x][y] = nil end end
     local node_id_counter = 1
+    local tx_counter = 1
+    local rx_counter = 1
 
     local function add_node(x, y, type, module_idx, name)
         local id = node_id_counter
         local node = { id = id, x = x, y = y, type = type, module = module_idx, name = name, level = 0.33, pan = 0.0 }
+        if type == "out" then
+            node.tx_idx = tx_counter
+            tx_counter = tx_counter + 1
+        elseif type == "in" then
+            node.rx_idx = rx_counter
+            rx_counter = rx_counter + 1
+        end
         G.nodes[id] = node; G.grid_map[x][y] = node; node_id_counter = node_id_counter + 1
         return id
     end
