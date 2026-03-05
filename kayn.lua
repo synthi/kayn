@@ -1,6 +1,6 @@
--- kayn.lua v0.504
--- CHANGELOG v0.504:
--- 1. INIT: Nacimiento del ecosistema cibernético Kayn (basado en la arquitectura Elianne v0.504).
+-- kayn.lua v0.507
+-- CHANGELOG v0.507:
+-- 1. FIX FATAL: Expansión de bucles de matriz a 66 iteraciones para soportar la nueva topología.
 
 engine.name = 'Kayn'
 
@@ -30,7 +30,7 @@ local screen_metro
 osc.event = function(path, args, from)
     if path == '/kayn_levels' then
         if not G.node_levels then G.node_levels = {} end
-        for i = 1, 64 do G.node_levels[i] = args[i + 2] or 0 end
+        for i = 1, 66 do G.node_levels[i] = args[i + 2] or 0 end
         G.screen_dirty = true
     end
 end
