@@ -1,4 +1,8 @@
--- lib/params_setup.lua v0.504
+-- lib/params_setup.lua v0.507
+-- CHANGELOG v0.507:
+-- 1. FIX FATAL: Recálculo exacto de los contadores de grupos para evitar el error "cannot nest GROUPs".
+-- 2. FIX FATAL: Rango de add_node_params del Nexus ajustado a (57, 66).
+
 local Params = {}
 
 function Params.init(G)
@@ -13,8 +17,8 @@ function Params.init(G)
             local node = G.nodes[i]
             if node then
                 params:add{type = "control", id = "node_lvl_" .. i, name = node.name .. " Lvl", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 0.33), action = function(x) if not G.booting then node.level = x; if node.type == "out" then engine.set_out_level(i, x) else engine.set_in_level(i, x) end end end}
-                if node.module == 10 and i >= 28 and i <= 31 then
-                    local def_pan = (i == 28 or i == 30) and -1.0 or 1.0
+                if node.module == 10 and i >= 57 and i <= 60 then
+                    local def_pan = (i == 57 or i == 59) and -1.0 or 1.0
                     params:add{type = "control", id = "node_pan_" .. i, name = node.name .. " Pan", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, def_pan), action = function(x) if not G.booting then node.pan = x; engine.set_in_pan(i, x) end end}
                 end
             end
@@ -58,7 +62,7 @@ function Params.init(G)
     params:add{type = "control", id = "m2_clk_thresh", name = "Clock Threshold", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.001, 0.1), action = function(x) if not G.booting then engine.m2_clk_thresh(x) end end}
     add_node_params(9, 20)
 
-    params:add_group("MOD 3: SERGE VCFQ", 18)
+    params:add_group("MOD 3: SERGE VCFQ", 17)
     params:add{type = "control", id = "m3_cutoff", name = "Cutoff", controlspec = controlspec.new(10.0, 18000.0, 'exp', 0.01, 1000.0, "Hz"), action = function(x) if not G.booting then engine.m3_cutoff(x) end end}
     params:add{type = "control", id = "m3_fine", name = "Cutoff Fine", controlspec = controlspec.new(-5.0, 5.0, 'lin', 0.001, 0.0, "Hz"), action = function(x) if not G.booting then engine.m3_fine(x) end end}
     params:add{type = "control", id = "m3_q", name = "Resonance (Q)", controlspec = controlspec.new(0.1, 500.0, 'exp', 0.1, 1.0), action = function(x) if not G.booting then engine.m3_q(x) end end}
@@ -93,7 +97,7 @@ function Params.init(G)
         add_node_params(37 + ((i-1)*4), 40 + ((i-1)*4))
     end
 
-    params:add_group("MOD 10: NEXUS", 33)
+    params:add_group("MOD 10: NEXUS", 32)
     params:add{type = "control", id = "m10_master_vol", name = "Master Volume", controlspec = controlspec.new(-60.0, 12.0, 'lin', 0.5, 0.0, "dB"), action = function(x) if not G.booting then engine.m10_master_vol(math.pow(10, x / 20)) end end}
     params:add{type = "control", id = "m10_cut_l", name = "Master Cutoff L", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_l(x) end end}
     params:add{type = "control", id = "m10_cut_r", name = "Master Cutoff R", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_r(x) end end}
@@ -112,7 +116,8 @@ function Params.init(G)
     params:add{type = "option", id = "m10_adc_mode_l", name = "ADC L Mode", options = {"AUDIO", "ENV"}, default = 1, action = function(x) if not G.booting then engine.adc_mode_l(x - 1) end end}
     params:add{type = "option", id = "m10_adc_mode_r", name = "ADC R Mode", options = {"AUDIO", "ENV"}, default = 1, action = function(x) if not G.booting then engine.adc_mode_r(x - 1) end end}
     params:add{type = "control", id = "m10_adc_slew", name = "ADC Env Slew", controlspec = controlspec.new(0.01, 2.0, 'exp', 0.01, 0.1, "s"), action = function(x) if not G.booting then engine.adc_slew(x) end end}
-    add_node_params(57, 64)
+    
+    add_node_params(57, 66)
 end
 
 return Params
