@@ -1,8 +1,7 @@
--- lib/16n.lua v0.500
--- CHANGELOG v0.500:
--- 1. Mantenimiento de versión para sincronía con el sistema global v0.500.
--- CHANGELOG v1.1:
--- 1. FIX FATAL: Callback MIDI envuelto en pcall para proteger el boot de Norns.
+-- lib/16n.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX: Declaración local estricta en la primera línea.
+-- 2. FIX: Mantenimiento de versión unificada.
 
 local _16n = {}
 _16n.last_values = {}
@@ -52,7 +51,6 @@ _16n.init = function(cc_cb_fn)
            local last = _16n.last_values[d.cc] or -1
            if d.val ~= last then
              _16n.last_values[d.cc] = d.val
-             -- PROTECCIÓN DE CALLBACK ASÍNCRONO
              pcall(cc_cb_fn, d) 
            end
         end
