@@ -1,6 +1,6 @@
--- lib/storage.lua v0.507
--- CHANGELOG v0.507:
--- 1. FIX FATAL: Expansión de bucles a 66 iteraciones.
+-- lib/storage.lua v0.508
+-- CHANGELOG v0.508:
+-- 1. FIX FATAL: Implementado Deep Merge en load() y load_snapshot() para evitar Topology Mismatch (crasheo por matrices antiguas).
 
 local Storage = {}
 local Matrix = include('lib/matrix')
@@ -30,14 +30,28 @@ function Storage.load(G, pset_number)
             G.active_snap = data.active_snap
             G.fader_map = data.fader_map or {}
             for i = 1, 16 do G.fader_latched[i] = false end
+            
             if data.patch then
-                G.patch = data.patch
+                -- DEEP MERGE: Evita destruir la matriz de 66x66 con una antigua de 64x64
+                for src_id = 1, 66 do
+                    if data.patch[src_id] then
+                        for dst_id = 1, 66 do
+                            if data.patch[src_id][dst_id] then
+                                G.patch[src_id][dst_id].active = data.patch[src_id][dst_id].active
+                                G.patch[src_id][dst_id].current_gain = data.patch[src_id][dst_id].current_gain
+                                G.patch[src_id][dst_id].level = data.patch[src_id][dst_id].level or 1.0
+                                G.patch[src_id][dst_id].pan = data.patch[src_id][dst_id].pan or 0.0
+                            end
+                        end
+                    end
+                end
+                
                 clock.run(function()
                     for dst_id = 1, 66 do
                         local has_active = false; local row_vals = {}
                         for src_id = 1, 66 do
                             local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
-                            G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                            if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0 end
                             row_vals[src_id] = is_active and 1.0 or 0.0
                             if is_active then has_active = true end
                         end
@@ -48,8 +62,8 @@ function Storage.load(G, pset_number)
                     for i = 1, 66 do
                         local node = G.nodes[i]
                         if node then
-                            node.level = params:get("node_lvl_" .. i)
-                            if node.module == 10 and i >= 57 and i <= 60 then node.pan = params:get("node_pan_" .. i) end
+                            node.level = params:get("node_lvl_" .. i) or 0.0
+                            if node.module == 10 and i >= 57 and i <= 60 then node.pan = params:get("node_pan_" .. i) or 0.0 end
                             Matrix.update_node_params(node)
                         end
                     end
@@ -80,7 +94,7 @@ function Storage.load_snapshot(G, snap_id)
     if not target or not target.has_data then return end
     if G.morph_coroutine then clock.cancel(G.morph_coroutine); G.morph_coroutine = nil end
     for i = 1, 16 do G.fader_latched[i] = false end
-    local morph_time = params:get("morph_time")
+    local morph_time = params:get("morph_time") or 0.0
     G.active_snap = snap_id
     
     if morph_time <= 0.05 then
@@ -88,8 +102,10 @@ function Storage.load_snapshot(G, snap_id)
         for dst_id = 1, 66 do
             local has_active = false; local row_vals = {}
             for src_id = 1, 66 do
-                local is_active = target.patch[src_id][dst_id].active
-                G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
+                if G.patch[src_id] and G.patch[src_id][dst_id] then
+                    G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                end
                 row_vals[src_id] = is_active and 1.0 or 0.0
                 if is_active then has_active = true end
             end
@@ -104,16 +120,17 @@ function Storage.load_snapshot(G, snap_id)
         for src_id = 1, 66 do
             start_patch[src_id] = {}
             for dst_id = 1, 66 do
-                local current = G.patch[src_id][dst_id].current_gain
-                if not current then current = G.patch[src_id][dst_id].active and 1.0 or 0.0 end
+                local current = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain or 0.0
                 start_patch[src_id][dst_id] = current
-                if target.patch[src_id][dst_id].active then G.patch[src_id][dst_id].active = true end
+                if target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active then 
+                    if G.patch[src_id] and G.patch[src_id][dst_id] then G.patch[src_id][dst_id].active = true end
+                end
             end
         end
         local start_time = util.time()
         for dst_id = 1, 66 do
             local needs_row = false
-            for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or target.patch[src_id][dst_id].active then needs_row = true end end
+            for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
             if needs_row then engine.resume_matrix_row(dst_id - 1) end
         end
         pcall(function() engine.set_morph_lag(0.1) end)
@@ -127,8 +144,10 @@ function Storage.load_snapshot(G, snap_id)
                     for dst_id = 1, 66 do
                         local has_active = false; local row_vals = {}
                         for src_id = 1, 66 do
-                            local is_active = target.patch[src_id][dst_id].active
-                            G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                            local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
+                            if G.patch[src_id] and G.patch[src_id][dst_id] then
+                                G.patch[src_id][dst_id].active = is_active; G.patch[src_id][dst_id].current_gain = is_active and 1.0 or 0.0
+                            end
                             row_vals[src_id] = is_active and 1.0 or 0.0
                             if is_active then has_active = true end
                         end
@@ -157,13 +176,16 @@ function Storage.load_snapshot(G, snap_id)
                 for dst_id = 1, 66 do
                     local row_changed = false; local row_vals = {}
                     for src_id = 1, 66 do
-                        local start_val = start_patch[src_id][dst_id]; local end_active = target.patch[src_id][dst_id].active
+                        local start_val = start_patch[src_id][dst_id]
+                        local end_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
                         local end_val = end_active and 1.0 or 0.0; local current_val = start_val
                         if start_val ~= end_val then
                             current_val = start_val + ((end_val - start_val) * progress)
-                            if G.patch[src_id][dst_id].current_gain ~= current_val then G.patch[src_id][dst_id].current_gain = current_val; row_changed = true end
+                            if G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain ~= current_val then 
+                                G.patch[src_id][dst_id].current_gain = current_val; row_changed = true 
+                            end
                         end
-                        row_vals[src_id] = G.patch[src_id][dst_id].current_gain
+                        row_vals[src_id] = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain or 0.0
                     end
                     if row_changed then engine.patch_row_set(dst_id, table.concat(row_vals, ",")) end
                 end
