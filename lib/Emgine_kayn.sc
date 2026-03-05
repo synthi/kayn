@@ -1,4 +1,8 @@
-// lib/Engine_Kayn.sc v0.504
+// lib/Engine_Kayn.sc v0.505
+// CHANGELOG v0.504:
+// 1. FIX FATAL: Corregidos los índices de los buses de audio para los Cyber VCAs (36 a 45) y el Nexus (56 a 63).
+// 2. FIX: Comando OSC del Nexus apuntado correctamente a synth_mods[9].
+
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
     var <synth_matrix_amps, <synth_matrix_rows, <synth_mods, <synth_adc;
@@ -128,7 +132,7 @@ Engine_Kayn : CroneEngine {
             slew_in = InFeedback.ar(in_sig) * In.kr(lvl_sig);
             rate_cv = InFeedback.ar(in_rate) * In.kr(lvl_rate);
             cycle_state = LocalIn.ar(1);
-            actual_in = Select.ar(K2A.ar(cycle_mode), [slew_in, cycle_state]);
+            actual_in = Select.ar(K2A.ar(cycle_mode),[slew_in, cycle_state]);
             smooth_out = Slew.ar(actual_in, 1.0 / (rise * (2.0 ** ((mod_rise + rate_cv) * 5.0))).max(0.001), 1.0 / (fall * (2.0 ** ((mod_fall + rate_cv) * 5.0))).max(0.001));
             cycle_trig = Schmidt.ar(smooth_out, 0.01, 0.99);
             next_state = 1.0 - cycle_trig;
@@ -249,7 +253,7 @@ Engine_Kayn : CroneEngine {
             vca_final = LinXFade2.ar(vca_env, vca_env.squared, vca_curve * 2 - 1);
             aud_out = aud_in * vca_final;
             
-            env_src = Select.ar(K2A.ar(env_src_sel), [aud_in, aud_out]);
+            env_src = Select.ar(K2A.ar(env_src_sel),[aud_in, aud_out]);
             env_out = (Amplitude.ar(env_src, 0.001, env_slew) * env_gain).clip(0.0, 2.0);
             
             Out.ar(out_aud, Shaper.ar(shaper_buf, aud_out.clip(-1.0, 1.0)) * In.kr(lvl_oaud));
@@ -316,12 +320,14 @@ Engine_Kayn : CroneEngine {
         synth_mods[2] = Synth.new(\Kayn_VCFQ,[\in_aud, bus_nodes_rx.index+10, \in_fm, bus_nodes_rx.index+11, \in_ping, bus_nodes_rx.index+12, \in_res, bus_nodes_rx.index+13, \out_lp, bus_nodes_tx.index+10, \out_bp, bus_nodes_tx.index+11, \out_hp, bus_nodes_tx.index+12, \out_notch, bus_nodes_tx.index+13, \lvl_aud, bus_levels.index+10, \lvl_fm, bus_levels.index+11, \lvl_ping, bus_levels.index+12, \lvl_res, bus_levels.index+13, \lvl_lp, bus_levels.index+10, \lvl_bp, bus_levels.index+11, \lvl_hp, bus_levels.index+12, \lvl_notch, bus_levels.index+13, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         synth_mods[3] = Synth.new(\Kayn_1005,[\in_car, bus_nodes_rx.index+14, \in_mod, bus_nodes_rx.index+15, \in_vca, bus_nodes_rx.index+16, \in_gate, bus_nodes_rx.index+17, \out_main, bus_nodes_tx.index+14, \out_rm, bus_nodes_tx.index+15, \out_sum, bus_nodes_tx.index+16, \out_diff, bus_nodes_tx.index+17, \lvl_car, bus_levels.index+14, \lvl_mod, bus_levels.index+15, \lvl_vca, bus_levels.index+16, \lvl_gate, bus_levels.index+17, \lvl_main, bus_levels.index+14, \lvl_rm, bus_levels.index+15, \lvl_sum, bus_levels.index+16, \lvl_diff, bus_levels.index+17, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
+        // ANOTACIÓN PARA EL EQUIPO: Índices de buses corregidos para los Cyber VCAs (36 a 45)
         5.do { |i|
-            var rx_idx = 18 + (i * 2); var tx_idx = 18 + (i * 2);
+            var rx_idx = 36 + (i * 2); var tx_idx = 36 + (i * 2);
             synth_mods[4+i] = Synth.new(\Kayn_CyberVCA,[\in_aud, bus_nodes_rx.index+rx_idx, \in_cv, bus_nodes_rx.index+rx_idx+1, \out_aud, bus_nodes_tx.index+tx_idx, \out_env, bus_nodes_tx.index+tx_idx+1, \lvl_aud, bus_levels.index+rx_idx, \lvl_cv, bus_levels.index+rx_idx+1, \lvl_oaud, bus_levels.index+tx_idx, \lvl_oenv, bus_levels.index+tx_idx+1, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         };
         
-        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+28, \in_mr, bus_nodes_rx.index+29, \in_al, bus_nodes_rx.index+30, \in_ar, bus_nodes_rx.index+31, \out_ml, context.out_b.index, \out_mr, context.out_b.index+1, \out_tl, bus_nodes_tx.index+30, \out_tr, bus_nodes_tx.index+31, \lvl_ml, bus_levels.index+28, \lvl_mr, bus_levels.index+29, \lvl_al, bus_levels.index+30, \lvl_ar, bus_levels.index+31, \pan_ml, bus_pans.index+28, \pan_mr, bus_pans.index+29, \pan_al, bus_pans.index+30, \pan_ar, bus_pans.index+31, \lvl_oml, bus_levels.index+28, \lvl_omr, bus_levels.index+29, \lvl_otl, bus_levels.index+30, \lvl_otr, bus_levels.index+31, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
+        // ANOTACIÓN PARA EL EQUIPO: Índices de buses corregidos para el Nexus (56 a 63)
+        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+56, \in_mr, bus_nodes_rx.index+57, \in_al, bus_nodes_rx.index+58, \in_ar, bus_nodes_rx.index+59, \out_ml, context.out_b.index, \out_mr, context.out_b.index+1, \out_tl, bus_nodes_tx.index+60, \out_tr, bus_nodes_tx.index+61, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+56, \lvl_omr, bus_levels.index+57, \lvl_otl, bus_levels.index+60, \lvl_otr, bus_levels.index+61, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
 
         this.addCommand("patch_set", "iif", { |msg| matrix_state[msg[1]-1][msg[2]-1] = msg[3]; synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
         this.addCommand("patch_row_set", "is", { |msg| matrix_state[msg[1]-1] = msg[2].asString.split($,).collect({|i| i.asFloat}); synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
