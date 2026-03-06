@@ -1,8 +1,8 @@
--- lib/params_setup.lua v0.516
+-- lib/params_setup.lua v0.519
+-- CHANGELOG v0.519:
+-- 1. FIX FATAL: Corregido crash en init() causado por llamada a engine.m4_drive (nil). Redirigido a set_global_physics.
 -- CHANGELOG v0.516:
 -- 1. FIX: Añadidos parámetros de Space-Time Core (Mod 9) con mapeo exacto de Encoders.
--- 2. FIX: Reestructuración de Nexus (Mod 10).
--- 3. FIX: Comando m3_ping envía un '1' para evitar crash en Fates.
 
 local Params = {}
 
@@ -11,7 +11,7 @@ function Params.init(G)
     params:add_group("GLOBAL PHYSICS", 3)
     params:add{type = "control", id = "thermal_drift", name = "System Age", controlspec = controlspec.new(0.0, 1, 'lin', 0.001, 0.02), action = function(x) if not G.booting then engine.set_global_physics("thermal", x) end end}
     params:add{type = "control", id = "morph_time", name = "Morph Time", controlspec = controlspec.new(0.0, 120.0, 'lin', 0.1, 1.0, "s")}
-    params:add{type = "control", id = "transformer_drive", name = "Transformer Drive", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.2), action = function(x) if not G.booting then engine.m4_drive(x) end end}
+    params:add{type = "control", id = "transformer_drive", name = "Transformer Drive", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.2), action = function(x) if not G.booting then engine.set_global_physics("droop", x) end end}
 
     local function add_node_params(start_id, end_id)
         for i = start_id, end_id do
