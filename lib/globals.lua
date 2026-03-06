@@ -1,5 +1,5 @@
--- lib/globals.lua v0.513
--- CHANGELOG v0.513:
+-- lib/globals.lua v0.515
+-- CHANGELOG v0.515-. fixes
 -- 1. ARQUITECTURA: 64 nodos exactos. 32 TX, 32 RX.
 -- 2. MÓDULOS: Añadido Space-Time Core (Mod 9). Nexus reestructurado.
 
@@ -36,7 +36,7 @@ G.patch = {}
 G.nodes = {}
 G.grid_map = {}
 
-G.module_by_col = {1,1, 2,2,2, 3,3, 4,4, 5, 6, 7, 8, 14, 15,16}
+G.module_by_col = {1,1, 2,2,2, 3,3, 4,4, 5, 6, 7, 8, 9, 10, 10}
 G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP", "CYBER VCA 1", "CYBER VCA 2", "CYBER VCA 3", "CYBER VCA 4", "SPACE-TIME CORE", "NEXUS"}
 
 function G.init_nodes()
