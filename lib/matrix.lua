@@ -1,12 +1,12 @@
--- lib/matrix.lua v0.510
--- CHANGELOG v0.510:
--- 1. OPTIMIZACIÓN: Mapeo cruzado de IDs de Lua a índices TX/RX de SuperCollider.
+-- lib/matrix.lua v0.513
+-- CHANGELOG v0.513:
+-- 1. FIX: Ajuste de bucles a 64 nodos y 32 buses TX/RX.
 
 local Matrix = {}
 
 local function evaluate_row_pause(dst_id, G)
     local active_count = 0
-    for src_id = 1, 66 do
+    for src_id = 1, 64 do
         if G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active then
             active_count = active_count + 1
         end
@@ -38,13 +38,13 @@ function Matrix.disconnect(src_id, dst_id, G)
 end
 
 function Matrix.init(G)
-    for dst_id = 1, 66 do
+    for dst_id = 1, 64 do
         local dst_node = G.nodes[dst_id]
         if dst_node and dst_node.type == "in" then
             local has_active = false; local row_vals = {}
-            for i = 1, 34 do row_vals[i] = 0.0 end
+            for i = 1, 32 do row_vals[i] = 0.0 end
             
-            for src_id = 1, 66 do
+            for src_id = 1, 64 do
                 local src_node = G.nodes[src_id]
                 if src_node and src_node.type == "out" then
                     local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
@@ -59,7 +59,7 @@ function Matrix.init(G)
         end
     end
     
-    for i = 1, 66 do
+    for i = 1, 64 do
         local lvl = params:get("node_lvl_" .. i) or 0.0
         local node = G.nodes[i]
         if node then
