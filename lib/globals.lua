@@ -1,4 +1,6 @@
--- lib/globals.lua v0.517
+-- lib/globals.lua v0.518
+-- CHANGELOG v0.518:
+-- 1. ARQUITECTURA: Implementada DMZ 34x34. tx_counter y rx_counter inician en 3.
 -- CHANGELOG v0.516:
 -- 1. FIX FATAL: Corregido el error tipográfico en G.module_by_col que crasheaba la UI.
 -- 2. ARQUITECTURA: Implementado "Diagnostic Shift". Osc 1 Out es tx_idx=2. ADC Out R es tx_idx=1.
@@ -41,12 +43,11 @@ G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP
 
 function G.init_nodes()
     for x = 1, 16 do G.grid_map[x] = {}; for y = 1, 8 do G.grid_map[x][y] = nil end end
-    local node_id_counter = 1
     
-    -- DIAGNOSTIC SHIFT: Empezamos en 2 para que el último nodo (ADC) ocupe el índice 1 (bus 0 en SC).
+    -- DIAGNOSTIC SHIFT: Empezamos en 3 para que los nodos 1 y 2 sean Dummy Nodes (DMZ 34x34) y evadir el bug de Fates.
     local node_id_counter = 1
-    local tx_counter = 1
-    local rx_counter = 1
+    local tx_counter = 3
+    local rx_counter = 3
 
     local function add_node(x, y, type, module_idx, name)
         local id = node_id_counter
@@ -54,11 +55,11 @@ function G.init_nodes()
         if type == "out" then
             node.tx_idx = tx_counter
             tx_counter = tx_counter + 1
-            if tx_counter > 32 then tx_counter = 1 end
+            if tx_counter > 34 then tx_counter = 3 end
         elseif type == "in" then
             node.rx_idx = rx_counter
             rx_counter = rx_counter + 1
-            if rx_counter > 32 then rx_counter = 1 end
+            if rx_counter > 34 then rx_counter = 3 end
         end
         G.nodes[id] = node; G.grid_map[x][y] = node; node_id_counter = node_id_counter + 1
         return id
