@@ -1,6 +1,6 @@
--- kayn.lua v0.513
--- CHANGELOG v0.513:
--- 1. FIX: Ajuste de bucles a 64 nodos y mapeo de índices TX/RX.
+-- kayn.lua v0.516
+-- CHANGELOG v0.516:
+-- 1. FIX FATAL: Corregido el mapeo de OSC args para que los vúmetros lean el índice exacto de TX/RX.
 
 engine.name = 'Kayn'
 
@@ -29,9 +29,9 @@ osc.event = function(path, args, from)
             local node = G.nodes[i]
             if node then
                 if node.type == "out" then
-                    G.node_levels[i] = args[2 + node.tx_idx] or 0
+                    G.node_levels[i] = args[node.tx_idx] or 0
                 elseif node.type == "in" then
-                    G.node_levels[i] = args[2 + 32 + node.rx_idx] or 0
+                    G.node_levels[i] = args[32 + node.rx_idx] or 0
                 end
             end
         end
