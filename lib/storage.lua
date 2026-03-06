@@ -1,5 +1,5 @@
--- lib/storage.lua v0.513
--- CHANGELOG v0.513:
+-- lib/storage.lua v0.516
+-- CHANGELOG v0.516:
 -- 1. FIX: Ajuste de bucles a 64 nodos y 32 buses TX/RX.
 
 local Storage = {}
