@@ -1,4 +1,7 @@
-// lib/Engine_Kayn.sc v0.516
+// lib/Engine_Kayn.sc v0.518
+// CHANGELOG v0.518:
+// 1. ARQUITECTURA: Implementada DMZ 34x34 (Dummy Nodes en índices 0 y 1) para evadir el bug de solapamiento de memoria ALSA/Jackd en Norns Fates.
+// 2. DSP: Space-Time Core reescrito. Eliminado HPF en Reverb para decay infinito. Modulación difusa (LFNoise2). Tape con tap estéreo independiente (Haas orgánico).
 // CHANGELOG v0.516:
 // 1. ARQUITECTURA: Topología exacta de 32 TX y 32 RX. Implementado "Diagnostic Shift" para aislar el índice 0.
 // 2. FIX FATAL: Corregido el colapso matemático (NaN) en los VCOs que silenciaba el motor.
@@ -15,16 +18,17 @@ Engine_Kayn : CroneEngine {
 
     alloc {
         var wt_node, wt_master;
-        bus_nodes_tx = Bus.audio(context.server, 32);
-        bus_nodes_rx = Bus.audio(context.server, 32);
+        // DMZ 34x34: Pedimos 34 buses. Los índices 0 y 1 son sacrificables (Dummy Nodes) para el bug de Fates.
+        bus_nodes_tx = Bus.audio(context.server, 34);
+        bus_nodes_rx = Bus.audio(context.server, 34);
         bus_levels = Bus.control(context.server, 64);
         bus_pans = Bus.control(context.server, 64);
         bus_physics = Bus.control(context.server, 10);
         64.do { |i| bus_levels.setAt(i, 0.33) };
         
         synth_mods = Array.newClear(10);
-        synth_matrix_rows = Array.newClear(32);
-        matrix_state = Array.fill(32, { Array.fill(32, 0.0) });
+        synth_matrix_rows = Array.newClear(34);
+        matrix_state = Array.fill(34, { Array.fill(34, 0.0) });
 
         wt_node = Signal.fill(1024, { |i| tanh(i.linlin(0, 1023, -1.0, 1.0) * 1.3) / tanh(1.3) });
         ca3080_node_buf = Buffer.loadCollection(context.server, wt_node.asWavetable);
@@ -36,14 +40,14 @@ Engine_Kayn : CroneEngine {
         OSCFunc({ |msg| NetAddr("127.0.0.1", 10111).sendMsg("/kayn_levels", *msg.drop(3)); }, '/kayn_levels', context.server.addr).fix;
 
         SynthDef(\Kayn_MatrixAmps, {
-            var tx = InFeedback.ar(bus_nodes_tx.index, 32);
-            var rx = InFeedback.ar(bus_nodes_rx.index, 32);
+            var tx = InFeedback.ar(bus_nodes_tx.index, 34);
+            var rx = InFeedback.ar(bus_nodes_rx.index, 34);
             SendReply.kr(Impulse.kr(15), '/kayn_levels', Amplitude.kr(tx ++ rx, 0.05, 0.1));
         }).add;
 
         SynthDef(\Kayn_MatrixRow, { arg out_bus;
-            var tx = InFeedback.ar(bus_nodes_tx.index, 32);
-            var gains = NamedControl.kr(\gains, 0 ! 32);
+            var tx = InFeedback.ar(bus_nodes_tx.index, 34);
+            var gains = NamedControl.kr(\gains, 0 ! 34);
             Out.ar(out_bus, (tx * gains).sum);
         }).add;
 
@@ -284,7 +288,7 @@ Engine_Kayn : CroneEngine {
 
             var morph_lag = In.kr(phys_bus + 7);
             var aud_in, cv_in, cv_d0, cv_d1, cv_d2, cv_d3;
-            var tape_time, tape_fb, tape_wow_amt, tape_drive, tape_tone_freq, tape_local, tape_in_sig, wow_sig, tape_del, tape_sat, tape_filt, tape_out_l, tape_out_r;
+            var tape_time, tape_fb, tape_wow_amt, tape_drive, tape_tone_freq, tape_local, tape_in_sig, wow_sig, tape_del_l, tape_del_r, tape_sat_l, tape_sat_r, tape_filt_l, tape_filt_r, tape_out_l, tape_out_r;
             var rev_decay, rev_bloom, rev_damp, rev_predelay, rev_in, ap1, ap2, ap3, ap4, rev_local, rev_fb_sig, mod_rate, mod_depth, lfo_l, lfo_r, rev_del_l, rev_del_r, rev_filt_l, rev_filt_r, rev_out_l, rev_out_r;
             var final_l, final_r;
 
@@ -306,13 +310,21 @@ Engine_Kayn : CroneEngine {
             tape_local = LocalIn.ar(1);
             tape_in_sig = aud_in + (tape_local * tape_fb);
             wow_sig = SinOsc.ar(LFNoise2.kr(0.5).range(0.5, 3.0)) * tape_wow_amt * 0.02;
-            tape_del = DelayC.ar(tape_in_sig, 4.0, tape_time + wow_sig);
-            tape_sat = (tape_del * tape_drive).tanh / tape_drive;
-            tape_filt = LPF.ar(tape_sat, tape_tone_freq);
-            LocalOut.ar(tape_filt);
+            
+            // Haas effect: L reads tape_time, R reads tape_time * 1.02 + 0.005
+            tape_del_l = DelayC.ar(tape_in_sig, 4.0, tape_time + wow_sig);
+            tape_del_r = DelayC.ar(tape_in_sig, 4.0, (tape_time * 1.02) + 0.005 + wow_sig);
+            
+            tape_sat_l = (tape_del_l * tape_drive).tanh / tape_drive;
+            tape_sat_r = (tape_del_r * tape_drive).tanh / tape_drive;
+            
+            tape_filt_l = LPF.ar(tape_sat_l, tape_tone_freq);
+            tape_filt_r = LPF.ar(tape_sat_r, tape_tone_freq);
+            
+            LocalOut.ar(tape_filt_l); // Feedback mono from L to keep it stable
 
-            tape_out_l = tape_filt;
-            tape_out_r = DelayC.ar(tape_filt, 0.05, 0.015);
+            tape_out_l = tape_filt_l;
+            tape_out_r = tape_filt_r;
 
             // --- BLOOM REVERB ---
             rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1); 
@@ -329,12 +341,12 @@ Engine_Kayn : CroneEngine {
 
             rev_local = LocalIn.ar(2);
             rev_fb_sig = (ap4 ! 2) + (rev_local * rev_decay);
-            rev_fb_sig = HPF.ar(rev_fb_sig, 80).tanh; // DC Blocker + Softclip for infinite freeze
+            rev_fb_sig = rev_fb_sig.tanh; // Softclip for infinite freeze, NO HPF
 
             mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
-            mod_depth = Select.kr(r_mod,[0.0, 0.002, 0.008, 0.02]);
-            lfo_l = SinOsc.ar(mod_rate) * mod_depth;
-            lfo_r = SinOsc.ar(mod_rate * 1.1) * mod_depth;
+            mod_depth = Select.kr(r_mod,[0.0, 0.0005, 0.0015, 0.003]);
+            lfo_l = LFNoise2.ar(mod_rate) * mod_depth;
+            lfo_r = LFNoise2.ar(mod_rate * 1.1) * mod_depth;
 
             rev_del_l = DelayC.ar(rev_fb_sig[0], 0.5, 0.113 + lfo_l);
             rev_del_r = DelayC.ar(rev_fb_sig[1], 0.5, 0.149 + lfo_r);
@@ -405,24 +417,25 @@ Engine_Kayn : CroneEngine {
         context.server.sync;
 
         synth_matrix_amps = Synth.new(\Kayn_MatrixAmps,[], context.xg, \addToHead);
-        32.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
+        34.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
         
-        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+30, \out_r, bus_nodes_tx.index+31, \lvl_l, bus_levels.index+62, \lvl_r, bus_levels.index+63, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
+        // DMZ 34x34: Todos los índices de bus_nodes_tx y bus_nodes_rx se desplazan +2.
+        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+32, \out_r, bus_nodes_tx.index+33, \lvl_l, bus_levels.index+62, \lvl_r, bus_levels.index+63, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
         
-        synth_mods[0] = Synth.new(\Kayn_1023,[\in_fm1, bus_nodes_rx.index+0, \in_fm2, bus_nodes_rx.index+1, \in_pv1, bus_nodes_rx.index+2, \in_pv2, bus_nodes_rx.index+3, \out_o1, bus_nodes_tx.index+0, \out_o2, bus_nodes_tx.index+1, \out_i1, bus_nodes_tx.index+2, \out_i2, bus_nodes_tx.index+3, \lvl_fm1, bus_levels.index+0, \lvl_fm2, bus_levels.index+1, \lvl_pv1, bus_levels.index+2, \lvl_pv2, bus_levels.index+3, \lvl_o1, bus_levels.index+4, \lvl_o2, bus_levels.index+5, \lvl_i1, bus_levels.index+6, \lvl_i2, bus_levels.index+7, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
-        synth_mods[1] = Synth.new(\Kayn_Stochastic,[\in_cv1, bus_nodes_rx.index+4, \in_cv2, bus_nodes_rx.index+5, \in_sig, bus_nodes_rx.index+6, \in_rate, bus_nodes_rx.index+7, \in_samp, bus_nodes_rx.index+8, \in_trig, bus_nodes_rx.index+9, \out_n1, bus_nodes_tx.index+4, \out_n2, bus_nodes_tx.index+5, \out_smooth, bus_nodes_tx.index+6, \out_cycle, bus_nodes_tx.index+7, \out_stepped, bus_nodes_tx.index+8, \out_coupler, bus_nodes_tx.index+9, \lvl_cv1, bus_levels.index+8, \lvl_cv2, bus_levels.index+9, \lvl_sig, bus_levels.index+10, \lvl_rate, bus_levels.index+11, \lvl_samp, bus_levels.index+12, \lvl_trig, bus_levels.index+13, \lvl_n1, bus_levels.index+14, \lvl_n2, bus_levels.index+15, \lvl_smooth, bus_levels.index+16, \lvl_cycle, bus_levels.index+17, \lvl_stepped, bus_levels.index+18, \lvl_coupler, bus_levels.index+19, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
-        synth_mods[2] = Synth.new(\Kayn_VCFQ,[\in_aud, bus_nodes_rx.index+10, \in_fm, bus_nodes_rx.index+11, \in_ping, bus_nodes_rx.index+12, \in_res, bus_nodes_rx.index+13, \out_lp, bus_nodes_tx.index+10, \out_bp, bus_nodes_tx.index+11, \out_hp, bus_nodes_tx.index+12, \out_notch, bus_nodes_tx.index+13, \lvl_aud, bus_levels.index+20, \lvl_fm, bus_levels.index+21, \lvl_ping, bus_levels.index+22, \lvl_res, bus_levels.index+23, \lvl_lp, bus_levels.index+24, \lvl_bp, bus_levels.index+25, \lvl_hp, bus_levels.index+26, \lvl_notch, bus_levels.index+27, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
-        synth_mods[3] = Synth.new(\Kayn_1005,[\in_car, bus_nodes_rx.index+14, \in_mod, bus_nodes_rx.index+15, \in_vca, bus_nodes_rx.index+16, \in_gate, bus_nodes_rx.index+17, \out_main, bus_nodes_tx.index+14, \out_rm, bus_nodes_tx.index+15, \out_sum, bus_nodes_tx.index+16, \out_diff, bus_nodes_tx.index+17, \lvl_car, bus_levels.index+28, \lvl_mod, bus_levels.index+29, \lvl_vca, bus_levels.index+30, \lvl_gate, bus_levels.index+31, \lvl_main, bus_levels.index+32, \lvl_rm, bus_levels.index+33, \lvl_sum, bus_levels.index+34, \lvl_diff, bus_levels.index+35, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[0] = Synth.new(\Kayn_1023,[\in_fm1, bus_nodes_rx.index+2, \in_fm2, bus_nodes_rx.index+3, \in_pv1, bus_nodes_rx.index+4, \in_pv2, bus_nodes_rx.index+5, \out_o1, bus_nodes_tx.index+2, \out_o2, bus_nodes_tx.index+3, \out_i1, bus_nodes_tx.index+4, \out_i2, bus_nodes_tx.index+5, \lvl_fm1, bus_levels.index+0, \lvl_fm2, bus_levels.index+1, \lvl_pv1, bus_levels.index+2, \lvl_pv2, bus_levels.index+3, \lvl_o1, bus_levels.index+4, \lvl_o2, bus_levels.index+5, \lvl_i1, bus_levels.index+6, \lvl_i2, bus_levels.index+7, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[1] = Synth.new(\Kayn_Stochastic,[\in_cv1, bus_nodes_rx.index+6, \in_cv2, bus_nodes_rx.index+7, \in_sig, bus_nodes_rx.index+8, \in_rate, bus_nodes_rx.index+9, \in_samp, bus_nodes_rx.index+10, \in_trig, bus_nodes_rx.index+11, \out_n1, bus_nodes_tx.index+6, \out_n2, bus_nodes_tx.index+7, \out_smooth, bus_nodes_tx.index+8, \out_cycle, bus_nodes_tx.index+9, \out_stepped, bus_nodes_tx.index+10, \out_coupler, bus_nodes_tx.index+11, \lvl_cv1, bus_levels.index+8, \lvl_cv2, bus_levels.index+9, \lvl_sig, bus_levels.index+10, \lvl_rate, bus_levels.index+11, \lvl_samp, bus_levels.index+12, \lvl_trig, bus_levels.index+13, \lvl_n1, bus_levels.index+14, \lvl_n2, bus_levels.index+15, \lvl_smooth, bus_levels.index+16, \lvl_cycle, bus_levels.index+17, \lvl_stepped, bus_levels.index+18, \lvl_coupler, bus_levels.index+19, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[2] = Synth.new(\Kayn_VCFQ,[\in_aud, bus_nodes_rx.index+12, \in_fm, bus_nodes_rx.index+13, \in_ping, bus_nodes_rx.index+14, \in_res, bus_nodes_rx.index+15, \out_lp, bus_nodes_tx.index+12, \out_bp, bus_nodes_tx.index+13, \out_hp, bus_nodes_tx.index+14, \out_notch, bus_nodes_tx.index+15, \lvl_aud, bus_levels.index+20, \lvl_fm, bus_levels.index+21, \lvl_ping, bus_levels.index+22, \lvl_res, bus_levels.index+23, \lvl_lp, bus_levels.index+24, \lvl_bp, bus_levels.index+25, \lvl_hp, bus_levels.index+26, \lvl_notch, bus_levels.index+27, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[3] = Synth.new(\Kayn_1005,[\in_car, bus_nodes_rx.index+16, \in_mod, bus_nodes_rx.index+17, \in_vca, bus_nodes_rx.index+18, \in_gate, bus_nodes_rx.index+19, \out_main, bus_nodes_tx.index+16, \out_rm, bus_nodes_tx.index+17, \out_sum, bus_nodes_tx.index+18, \out_diff, bus_nodes_tx.index+19, \lvl_car, bus_levels.index+28, \lvl_mod, bus_levels.index+29, \lvl_vca, bus_levels.index+30, \lvl_gate, bus_levels.index+31, \lvl_main, bus_levels.index+32, \lvl_rm, bus_levels.index+33, \lvl_sum, bus_levels.index+34, \lvl_diff, bus_levels.index+35, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
         4.do { |i|
-            var rx_idx = 18 + (i * 2); var tx_idx = 18 + (i * 2);
+            var rx_idx = 20 + (i * 2); var tx_idx = 20 + (i * 2);
             var lvl_rx = 36 + (i * 4); var lvl_tx = 38 + (i * 4);
             synth_mods[4+i] = Synth.new(\Kayn_CyberVCA,[\in_aud, bus_nodes_rx.index+rx_idx, \in_cv, bus_nodes_rx.index+rx_idx+1, \out_aud, bus_nodes_tx.index+tx_idx, \out_env, bus_nodes_tx.index+tx_idx+1, \lvl_aud, bus_levels.index+lvl_rx, \lvl_cv, bus_levels.index+lvl_rx+1, \lvl_oaud, bus_levels.index+lvl_tx, \lvl_oenv, bus_levels.index+lvl_tx+1, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         };
         
-        synth_mods[8] = Synth.new(\Kayn_SpaceTime,[\in_aud, bus_nodes_rx.index+26, \in_cv, bus_nodes_rx.index+27, \out_l, bus_nodes_tx.index+26, \out_r, bus_nodes_tx.index+27, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[8] = Synth.new(\Kayn_SpaceTime,[\in_aud, bus_nodes_rx.index+28, \in_cv, bus_nodes_rx.index+29, \out_l, bus_nodes_tx.index+28, \out_r, bus_nodes_tx.index+29, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
-        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+28, \in_mr, bus_nodes_rx.index+29, \in_al, bus_nodes_rx.index+30, \in_ar, bus_nodes_rx.index+31, \out_ml, bus_nodes_tx.index+28, \out_mr, bus_nodes_tx.index+29, \hw_out_l, context.out_b.index, \hw_out_r, context.out_b.index+1, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+60, \lvl_omr, bus_levels.index+61, \phys_bus, bus_physics.index, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
+        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+30, \in_mr, bus_nodes_rx.index+31, \in_al, bus_nodes_rx.index+32, \in_ar, bus_nodes_rx.index+33, \out_ml, bus_nodes_tx.index+30, \out_mr, bus_nodes_tx.index+31, \hw_out_l, context.out_b.index, \hw_out_r, context.out_b.index+1, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+60, \lvl_omr, bus_levels.index+61, \phys_bus, bus_physics.index, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
 
         this.addCommand("patch_set", "iif", { |msg| matrix_state[msg[1]-1][msg[2]-1] = msg[3]; synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
         this.addCommand("patch_row_set", "is", { |msg| matrix_state[msg[1]-1] = msg[2].asString.split($,).collect({|i| i.asFloat}); synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
