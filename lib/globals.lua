@@ -1,4 +1,4 @@
--- lib/globals.lua v0.516
+-- lib/globals.lua v0.517
 -- CHANGELOG v0.516:
 -- 1. FIX FATAL: Corregido el error tipográfico en G.module_by_col que crasheaba la UI.
 -- 2. ARQUITECTURA: Implementado "Diagnostic Shift". Osc 1 Out es tx_idx=2. ADC Out R es tx_idx=1.
@@ -44,8 +44,9 @@ function G.init_nodes()
     local node_id_counter = 1
     
     -- DIAGNOSTIC SHIFT: Empezamos en 2 para que el último nodo (ADC) ocupe el índice 1 (bus 0 en SC).
-    local tx_counter = 2
-    local rx_counter = 2
+    local node_id_counter = 1
+    local tx_counter = 1
+    local rx_counter = 1
 
     local function add_node(x, y, type, module_idx, name)
         local id = node_id_counter
