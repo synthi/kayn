@@ -1,4 +1,6 @@
--- kayn.lua v0.516
+-- kayn.lua v0.518
+-- CHANGELOG v0.518:
+-- 1. FIX FATAL: G.booting = false movido antes de params:bang() para evitar deadlock de inicialización OSC.
 -- CHANGELOG v0.516:
 -- 1. FIX FATAL: Corregido el mapeo de OSC args para que los vúmetros lean el índice exacto de TX/RX.
 
@@ -31,7 +33,7 @@ osc.event = function(path, args, from)
                 if node.type == "out" then
                     G.node_levels[i] = args[node.tx_idx] or 0
                 elseif node.type == "in" then
-                    G.node_levels[i] = args[32 + node.rx_idx] or 0
+                    G.node_levels[i] = args[34 + node.rx_idx] or 0
                 end
             end
         end
@@ -160,9 +162,9 @@ function init()
         G.fader_last_raw[slider_id] = raw_val
     end)
     
+    G.booting = false -- FIX: Abrir compuertas OSC antes de disparar los valores guardados
     params:bang()
     pcall(function() engine.set_morph_lag(0.05) end)
-    G.booting = false
     print("KAYN DEBUG: BOOT COMPLETADO")
 end
 
