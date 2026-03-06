@@ -1,6 +1,6 @@
--- kayn.lua v0.510
--- CHANGELOG v0.510:
--- 1. OPTIMIZACIÓN: Mapeo cruzado de niveles OSC (TX/RX) a IDs de Lua.
+-- kayn.lua v0.513
+-- CHANGELOG v0.513:
+-- 1. FIX: Ajuste de bucles a 64 nodos y mapeo de índices TX/RX.
 
 engine.name = 'Kayn'
 
@@ -25,13 +25,13 @@ osc.event = function(path, args, from)
     if not G or G.booting then return end
     if path == '/kayn_levels' then
         if not G.node_levels then G.node_levels = {} end
-        for i = 1, 66 do
+        for i = 1, 64 do
             local node = G.nodes[i]
             if node then
                 if node.type == "out" then
                     G.node_levels[i] = args[2 + node.tx_idx] or 0
                 elseif node.type == "in" then
-                    G.node_levels[i] = args[2 + 34 + node.rx_idx] or 0
+                    G.node_levels[i] = args[2 + 32 + node.rx_idx] or 0
                 end
             end
         end
