@@ -1,4 +1,8 @@
-// lib/Engine_Kayn.sc v0.521
+// lib/Engine_Kayn.sc v0.522
+// CHANGELOG v0.522:
+// 1. FIX FATAL: Corregido error de compilación (Rate Mismatch) en SpaceTime. Se implementó A2K.kr para downsamplear señales CV de audio antes de alimentar UGens de control (OnePole.kr, LinExp.kr, BPeakEQ).
+// CHANGELOG v0.521:
+// 1. FIX FATAL: Erradicados los múltiples LocalIn/Out en SpaceTime que colapsaban el motor SC.
 // CHANGELOG v0.521:
 // 1. FIX FATAL: Erradicados los múltiples LocalIn/Out en SpaceTime que colapsaban el motor SC.
 // 2. DSP: Reverb reescrita a topología Schroeder/Moorer (6x CombL + 2x AllpassN) para decay infinito real.
@@ -292,12 +296,12 @@ Engine_Kayn : CroneEngine {
             var aud_in, cv_in, cv_d0, cv_d1, cv_d2, cv_d3;
             
             // Tape Vars
-            var tape_time, tape_fb_amt, tape_wow_amt, tape_drive, tape_tone_freq, tape_erosion;
+            var tape_time, tape_fb_amt, tape_wow_amt_k, tape_drive, tape_drive_k, tape_tone_freq, tape_erosion;
             var tape_fb_in, tape_in_sig, shared_wow, shared_flutter, shared_mod, tape_del_l, tape_del_r;
             var head_bump, tape_sat, tape_filt, dust_trig, dropout_env, tape_out_l, tape_out_r;
             
             // Reverb Vars
-            var rev_decay_time, rev_bloom, rev_damp, rev_predelay, rev_in;
+            var rev_decay_time, rev_bloom_k, rev_damp_k, rev_predelay, rev_in;
             var mod_rate, mod_depth, combs_l, combs_r, ap_l, ap_r, rev_filt_l, rev_filt_r, rev_out_l, rev_out_r;
             
             var final_l, final_r;
@@ -314,19 +318,20 @@ Engine_Kayn : CroneEngine {
             // --- TAPE ECHO (Avant_lab_V Topology) ---
             // ==========================================
             tape_drive = (Lag.kr(t_drive, morph_lag) + cv_d0).clip(0.1, 5.0);
+            tape_drive_k = A2K.kr(tape_drive); // Downsample para BPeakEQ
             tape_time = (Lag.kr(t_time, morph_lag) + (cv_d1 * 2.0)).clip(0.01, 4.0);
             tape_fb_amt = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
-            tape_wow_amt = (Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0);
+            tape_wow_amt_k = A2K.kr((Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0)); // Downsample para OnePole
             tape_tone_freq = Select.kr(t_tone,[18000, 8000, 4000, 1500]);
-            tape_erosion = Select.kr(t_tone, [0.0, 0.0, 0.1, 0.3]); // Dropouts at lower tones
+            tape_erosion = Select.kr(t_tone,[0.0, 0.0, 0.1, 0.3]); // Dropouts at lower tones
 
             // Dedicated Feedback Bus (No LocalIn/Out)
             tape_fb_in = InFeedback.ar(tape_fb_bus, 2);
             tape_in_sig = (aud_in ! 2) + (tape_fb_in * tape_fb_amt);
 
             // Wow & Flutter (Inertial)
-            shared_wow = OnePole.kr(LFNoise2.kr(Rand(0.5, 2.0)) * tape_wow_amt * 0.005, 0.95);
-            shared_flutter = LFNoise1.kr(15) * tape_wow_amt * 0.0005;
+            shared_wow = OnePole.kr(LFNoise2.kr(Rand(0.5, 2.0)) * tape_wow_amt_k * 0.005, 0.95);
+            shared_flutter = LFNoise1.kr(15) * tape_wow_amt_k * 0.0005;
             shared_mod = shared_wow + shared_flutter;
 
             // Haas Effect Stereo Delay
@@ -334,7 +339,7 @@ Engine_Kayn : CroneEngine {
             tape_del_r = DelayC.ar(tape_in_sig[1], 4.0, (tape_time * 1.02) + 0.005 + shared_mod);
 
             // Asymmetric Saturation & Head Bump
-            head_bump = BPeakEQ.ar([tape_del_l, tape_del_r], 100, 1.0, tape_drive * 3.0);
+            head_bump = BPeakEQ.ar([tape_del_l, tape_del_r], 100, 1.0, tape_drive_k * 3.0);
             tape_sat = ((head_bump * (1.0 + tape_drive)) + 0.2).tanh - 0.2;
             tape_sat = tape_sat / (1.0 + (tape_drive * 0.5)); // Gain compensation
             tape_sat = LeakDC.ar(tape_sat);
@@ -355,14 +360,14 @@ Engine_Kayn : CroneEngine {
             // --- BLOOM REVERB (Schroeder/Moorer) ---
             // ==========================================
             // r_decay maps to 0.1s -> 100s (Infinite Freeze)
-            rev_decay_time = LinExp.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1), 0.0, 1.1, 0.1, 100.0); 
-            rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0);
-            rev_damp = (Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000);
+            rev_decay_time = LinExp.kr(A2K.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1)), 0.0, 1.1, 0.1, 100.0); 
+            rev_bloom_k = A2K.kr((Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0));
+            rev_damp_k = A2K.kr((Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000));
             rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 0.2);
 
             rev_in = DelayN.ar(aud_in ! 2, 0.2, rev_predelay);
 
-            mod_rate = Select.kr(r_mod, [0.0, 0.5, 1.2, 5.0]);
+            mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
             mod_depth = Select.kr(r_mod,[0.0, 0.0005, 0.0015, 0.003]);
 
             // Parallel Comb Filters (The Tank)
@@ -372,13 +377,13 @@ Engine_Kayn : CroneEngine {
             // Series Allpass Filters (Diffusion)
             ap_l = combs_l; ap_r = combs_r;
             2.do { 
-                ap_l = AllpassN.ar(ap_l, 0.05, Rand(0.01, 0.05), rev_bloom * 2.0); 
-                ap_r = AllpassN.ar(ap_r, 0.05, Rand(0.01, 0.05), rev_bloom * 2.0); 
+                ap_l = AllpassN.ar(ap_l, 0.05, Rand(0.01, 0.05), rev_bloom_k * 2.0); 
+                ap_r = AllpassN.ar(ap_r, 0.05, Rand(0.01, 0.05), rev_bloom_k * 2.0); 
             };
 
             // Damping
-            rev_filt_l = LPF.ar(ap_l, rev_damp) * 0.2;
-            rev_filt_r = LPF.ar(ap_r, rev_damp) * 0.2;
+            rev_filt_l = LPF.ar(ap_l, rev_damp_k) * 0.2;
+            rev_filt_r = LPF.ar(ap_r, rev_damp_k) * 0.2;
 
             rev_out_l = rev_filt_l;
             rev_out_r = rev_filt_r;
