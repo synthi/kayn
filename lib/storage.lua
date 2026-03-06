@@ -1,4 +1,7 @@
--- lib/storage.lua v0.516
+-- lib/storage.lua v0.518
+-- CHANGELOG v0.518:
+-- 1. FIX: Arrays de ruteo expandidos a 34 para la DMZ.
+-- 2. FIX: Clamping asintótico (math.max) en la interpolación exponencial para evitar NaN.
 -- CHANGELOG v0.516:
 -- 1. FIX: Ajuste de bucles a 64 nodos y 32 buses TX/RX.
 
@@ -50,7 +53,7 @@ function Storage.load(G, pset_number)
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 32 do row_vals[i] = 0.0 end
+                            for i = 1, 34 do row_vals[i] = 0.0 end
                             
                             for src_id = 1, 64 do
                                 local src_node = G.nodes[src_id]
@@ -111,7 +114,7 @@ function Storage.load_snapshot(G, snap_id)
             local dst_node = G.nodes[dst_id]
             if dst_node and dst_node.type == "in" then
                 local has_active = false; local row_vals = {}
-                for i = 1, 32 do row_vals[i] = 0.0 end
+                for i = 1, 34 do row_vals[i] = 0.0 end
                 
                 for src_id = 1, 64 do
                     local src_node = G.nodes[src_id]
@@ -164,7 +167,7 @@ function Storage.load_snapshot(G, snap_id)
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 32 do row_vals[i] = 0.0 end
+                            for i = 1, 34 do row_vals[i] = 0.0 end
                             
                             for src_id = 1, 64 do
                                 local src_node = G.nodes[src_id]
@@ -193,8 +196,13 @@ function Storage.load_snapshot(G, snap_id)
                             local p_obj = params.params[p_idx]
                             if p_obj and p_obj.controlspec then
                                 local current_val
-                                if string.find(p_id, "tune") or string.find(p_id, "cutoff") then current_val = start_val * math.pow(end_val / start_val, progress)
-                                else current_val = start_val + ((end_val - start_val) * progress) end
+                                if string.find(p_id, "tune") or string.find(p_id, "cutoff") then 
+                                    local safe_start = math.max(start_val, 0.0001)
+                                    local safe_end = math.max(end_val, 0.0001)
+                                    current_val = safe_start * math.pow(safe_end / safe_start, progress)
+                                else 
+                                    current_val = start_val + ((end_val - start_val) * progress) 
+                                end
                                 params:set(p_id, current_val)
                             end
                         end
@@ -204,7 +212,7 @@ function Storage.load_snapshot(G, snap_id)
                     local dst_node = G.nodes[dst_id]
                     if dst_node and dst_node.type == "in" then
                         local row_changed = false; local row_vals = {}
-                        for i = 1, 32 do row_vals[i] = 0.0 end
+                        for i = 1, 34 do row_vals[i] = 0.0 end
                         
                         for src_id = 1, 64 do
                             local src_node = G.nodes[src_id]
