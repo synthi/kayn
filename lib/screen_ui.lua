@@ -1,20 +1,22 @@
--- lib/screen_ui.lua v0.508
--- CHANGELOG v0.508:
--- 1. FIX FATAL: Implementado Pre-Init Redraw Trap estricto.
--- 2. FIX FATAL: Safe 2D Indexing en draw_node_menu y enc/key.
+-- lib/screen_ui.lua v0.513
+-- CHANGELOG v0.513:
+-- 1. FIX: Menús contextuales (Hold) para destinos CV y umbrales.
+-- 2. FIX: Space-Time Core UI dinámica (Tape/Reverb).
+-- 3. FIX: Nexus UI reestructurada.
 
 local ScreenUI = {}
 ScreenUI.ping_flash = {[3] = 0}
 
 local MenuDef = {
     [1] = { A = { title = "1023 - OSC 1", e1 = {id="m1_pwm1", name="PWM"}, e2 = {id="m1_tune1", name="TUNE"}, e3 = {id="m1_morph1", name="MORPH"}, e4 = {id="m1_fine1", name="FINE"}, k2 = {id="m1_range1", name=""}, k3 = {id="m1_out3_wave", name="WAVE"} }, B = { title = "1023 - OSC 2", e1 = {id="m1_pwm2", name="PWM"}, e2 = {id="m1_tune2", name="TUNE"}, e3 = {id="m1_morph2", name="MORPH"}, e4 = {id="m1_fine2", name="FINE"}, k2 = {id="m1_range2", name=""}, k3 = {id="m1_out4_wave", name="WAVE"} } },
-    [2] = { A = { title = "STOCHASTIC NOISE", e1 = {id="m2_slow_rate", name="SLOW RT"}, e2 = {id="m2_tilt1", name="TILT 1"}, e3 = {id="m2_tilt2", name="TILT 2"}, k2 = {id="m2_type1", name="N1"}, k3 = {id="m2_type2", name="N2"} }, B = { title = "STOCHASTIC SLEW", e1 = {id="m2_slew_shape", name="SHAPE"}, e2 = {id="m2_rise", name="RISE"}, e3 = {id="m2_fall", name="FALL"}, k2 = {id="m2_cycle_mode", name="CYCLE"} }, C = { title = "STOCHASTIC S&H", e1 = {id="m2_glide", name="GLIDE"}, e2 = {id="m2_clk_rate", name="CLOCK"}, e3 = {id="m2_prob_skew", name="SKEW"}, e4 = {id="m2_clk_thresh", name="THRESH"}, k2 = {id="m2_clk_mode", name="SRC"} } },
-    [3] = { A = { title = "SERGE VCFQ CORE", e1 = {id="m3_agc_drive", name="AGC DRV"}, e2 = {id="m3_cutoff", name="FREQ"}, e3 = {id="m3_q", name="RES"}, e4 = {id="m3_fine", name="FINE"}, k2 = {id="m3_ping", name="PING"}, k3 = {id="m3_range", name="RNG"} }, B = { title = "SERGE VCFQ MODS", e1 = {id="m3_ping_dcy", name="PING DCY"}, e2 = {id="m3_fm_amt", name="FM AMT"}, e3 = {id="m3_notch_bal", name="NOTCH"}, e4 = {id="m3_voct_amt", name="V/OCT"} } },
+    [2] = { A = { title = "STOCHASTIC NOISE", e1 = {id="m2_slow_rate", name="SLOW RT"}, e2 = {id="m2_tilt1", name="TILT 1"}, e3 = {id="m2_tilt2", name="TILT 2"}, k2 = {id="m2_type1", name="N1"}, k3 = {id="m2_type2", name="N2"} }, B = { title = "STOCHASTIC SLEW", e1 = {id="m2_slew_shape", name="SHAPE"}, e2 = {id="m2_rise", name="RISE"}, e3 = {id="m2_fall", name="FALL"}, k2 = {id="m2_cycle_mode", name="CYCLE"} }, C = { title = "STOCHASTIC S&H", e1 = {id="m2_glide", name="GLIDE"}, e2 = {id="m2_clk_rate", name="CLOCK"}, e3 = {id="m2_prob_skew", name="SKEW"}, k2 = {id="m2_clk_mode", name="SRC"} } },
+    [3] = { A = { title = "SERGE VCFQ CORE", e1 = {id="m3_agc_drive", name="AGC DRV"}, e2 = {id="m3_cutoff", name="FREQ"}, e3 = {id="m3_q", name="RES"}, e4 = {id="m3_fine", name="FINE"}, k2 = {id="m3_range", name="RNG"}, k3 = {id="m3_ping", name="PING"} }, B = { title = "SERGE VCFQ MODS", e1 = {id="m3_ping_dcy", name="PING DCY"}, e2 = {id="m3_fm_amt", name="FM AMT"}, e3 = {id="m3_notch_bal", name="NOTCH"}, e4 = {id="m3_voct_amt", name="V/OCT"} } },
     [4] = { A = { title = "1005 RING MOD", e1 = {id="m4_rm_am_mix", name="RM/AM"}, e2 = {id="m4_mod_gain", name="MOD"}, e3 = {id="m4_unmod_gain", name="UNMOD"}, e4 = {id="m4_xfade", name="XFADE"}, k2 = {id="m4_state", name="ST"} }, B = { title = "1005 VCA", e1 = {id="m4_gate_thresh", name="THRESH"}, e2 = {id="m4_vca_base", name="BASE"}, e3 = {id="m4_vca_resp", name="RESP"}, k2 = {id="m4_state", name="ST"} } },
-    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"}, k3 = {id="m5_env_src_sel", name="SRC"} } },[6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"}, k3 = {id="m6_env_src_sel", name="SRC"} } },
-    [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"}, k3 = {id="m7_env_src_sel", name="SRC"} } },
+    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"}, k3 = {id="m5_env_src_sel", name="SRC"} } },
+    [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"}, k3 = {id="m6_env_src_sel", name="SRC"} } },[7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"}, k3 = {id="m7_env_src_sel", name="SRC"} } },
     [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"}, k3 = {id="m8_env_src_sel", name="SRC"} } },
-    [9] = { A = { title = "CYBER VCA 5", e1 = {id="m9_env_gain", name="ENV GAIN"}, e2 = {id="m9_init_gain", name="BIAS"}, e3 = {id="m9_env_slew", name="ENV DCY"}, k2 = {id="m9_vca_curve", name="CRV"}, k3 = {id="m9_env_src_sel", name="SRC"} } },[10] = { A = { title = "NEXUS MASTER", e1 = {id="m10_res", name="RES"}, e2 = {id="m10_cut_l", name="VCF L"}, e3 = {id="m10_cut_r", name="VCF R"}, k2 = {id="m10_filt_byp", name="FILT"}, k3 = {id="m10_adc_mon", name="ADC"} }, B = { title = "NEXUS TAPE", e1 = {id="m10_tape_mix", name="MIX"}, e2 = {id="m10_tape_time", name="TIME"}, e3 = {id="m10_tape_fb", name="FDBK"}, e4 = {id="m10_wow", name="W&F"}, k2 = {id="m10_tape_sat", name="SAT"}, k3 = {id="m10_tape_mute", name="MUTE"} } }
+    [9] = { A = { title = "SPACE-TIME CORE", e1 = {id="m9_t_drive", name="DRIVE"}, e2 = {id="m9_t_time", name="TIME"}, e3 = {id="m9_t_fb", name="FDBK"}, e4 = {id="m9_t_wow", name="WOW"}, k2 = {id="m9_mode", name="MODE"}, k3 = {id="m9_t_tone", name="TONE"} } },
+    [10] = { A = { title = "NEXUS FILTERS", e1 = {id="m10_cut_l", name="CUT L"}, e2 = {id="m10_res_l", name="RES L"}, e3 = {id="m10_cut_r", name="CUT R"}, e4 = {id="m10_res_r", name="RES R"}, k2 = {id="m10_filt_byp", name="FILT"} }, B = { title = "NEXUS MASTER", e1 = {id="m10_master_vol", name="VOL"}, e2 = {id="thermal_drift", name="AGE"}, e3 = {id="m10_adc_slew", name="ADC SLW"}, e4 = {id="m10_drive", name="DRIVE"}, k2 = {id="m10_adc_mon", name="ADC"} } }
 }
 
 local function register_touch(G, param_id)
@@ -115,18 +117,32 @@ function ScreenUI.draw_node_menu(G)
         local val = ""; pcall(function() val = params:string(p_id) end)
         screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
         screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 DEST: ")
+    elseif node.module == 2 and node.type == "in" and node.id == 14 then
+        local thresh_val = 0; pcall(function() thresh_val = params:get("m2_clk_thresh") end)
+        screen.level(4); screen.move(10, 55); screen.text("E2 Thresh: "); screen.level(15); screen.text(string.format("%.2f", thresh_val))
+    elseif node.module == 3 and node.type == "in" and node.id == 23 then
+        local thresh_val = 0; pcall(function() thresh_val = params:get("m3_ping_thresh") end)
+        screen.level(4); screen.move(10, 55); screen.text("E2 Thresh: "); screen.level(15); screen.text(string.format("%.2f", thresh_val))
+    elseif node.module == 3 and node.type == "in" and node.id == 24 then
+        local p_id = "m3_res_dest"
+        local val = ""; pcall(function() val = params:string(p_id) end)
+        screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
+        screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 DEST: ")
     elseif node.module == 1 and node.type == "in" and node.id >= 1 and node.id <= 4 then
         local p_id = (node.id == 1) and "m1_fm1_mode" or ((node.id == 2) and "m1_fm2_mode" or ((node.id == 3) and "m1_pv1_mode" or "m1_pv2_mode"))
         local val = ""; pcall(function() val = params:string(p_id) end)
         screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
         screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 DEST: ")
-    elseif node.module == 10 and node.type == "out" and (node.id == 65 or node.id == 66) then
-        local p_id = (node.id == 65) and "m10_adc_mode_l" or "m10_adc_mode_r"
+    elseif node.module == 9 and node.type == "in" and node.id == 54 then
+        local p_id = "m9_cv_dest"
+        local val = ""; pcall(function() val = params:string(p_id) end)
+        screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
+        screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 DEST: ")
+    elseif node.module == 10 and node.type == "out" and (node.id == 63 or node.id == 64) then
+        local p_id = (node.id == 63) and "m10_adc_mode_l" or "m10_adc_mode_r"
         local val = ""; pcall(function() val = params:string(p_id) end)
         screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
         screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 MODE: ")
-        local slew_val = 0; pcall(function() slew_val = params:get("m10_adc_slew") end)
-        screen.level(4); screen.move(10, 55); screen.text("E2 Slew: "); screen.level(15); screen.text(string.format("%.2fs", slew_val))
     end
 end
 
@@ -148,6 +164,20 @@ function ScreenUI.draw_module_menu(G)
     local def = MenuDef[G.focus.module_id][G.focus.page]
     if not def then return end
 
+    -- Dynamic UI for Space-Time Core
+    if G.focus.module_id == 9 then
+        local mode = params:get("m9_mode")
+        if mode == 1 then
+            def.e1 = {id="m9_t_drive", name="DRIVE"}; def.e2 = {id="m9_t_time", name="TIME"}
+            def.e3 = {id="m9_t_fb", name="FDBK"}; def.e4 = {id="m9_t_wow", name="WOW"}
+            def.k3 = {id="m9_t_tone", name="TONE"}
+        else
+            def.e1 = {id="m9_r_decay", name="DECAY"}; def.e2 = {id="m9_r_bloom", name="BLOOM"}
+            def.e3 = {id="m9_r_damp", name="DAMP"}; def.e4 = {id="m9_r_predelay", name="PREDLY"}
+            def.k3 = {id="m9_r_mod", name="MOD"}
+        end
+    end
+
     screen.level(15); screen.move(64, 10); screen.text_center(def.title)
     draw_param(def.e1, 2, 30, "E1", false); draw_param(def.e2, 2, 45, "E2", false)
     draw_param(def.e3, 2, 60, "E3", false); draw_param(def.e4, 126, 30, "E4", true)
@@ -162,7 +192,9 @@ function ScreenUI.draw_module_menu(G)
     if def.k3 then 
         local k3_id = type(def.k3) == "table" and def.k3.id or def.k3; local k3_name = type(def.k3) == "table" and def.k3.name or "K3"
         local k3_val = ""; pcall(function() k3_val = clean_str(params:string(k3_id)) end)
-        screen.level(15); screen.move(126, 60); screen.text_right(k3_val); local w = screen.text_extents(k3_val); screen.level(4); screen.move(126 - w - 2, 60); screen.text_right("K3 " .. k3_name .. (k3_name ~= "" and ": " or ""))
+        local is_ping = (k3_name == "PING"); local is_flashing = is_ping and (util.time() - (ScreenUI.ping_flash[G.focus.module_id] or 0) < 0.15)
+        if is_flashing then screen.level(15); screen.move(126, 60); screen.text_right("PING!")
+        else screen.level(15); screen.move(126, 60); screen.text_right(k3_val); local w = screen.text_extents(k3_val); screen.level(4); screen.move(126 - w - 2, 60); screen.text_right("K3 " .. k3_name .. (k3_name ~= "" and ": " or "")) end
     end
 end
 
@@ -181,8 +213,8 @@ function ScreenUI.enc(G, n, d)
 
     if G.focus.state == "idle" then
         local target_param = nil
-        if n == 1 then target_param = "m10_master_vol" elseif n == 2 then target_param = "m10_cut_l" elseif n == 3 then target_param = "m10_cut_r" elseif n == 4 then target_param = "m10_tape_mix" end
-        if target_param then register_touch(G, target_param); pcall(function() if n == 1 or n == 4 then params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) else params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 100.0 or 10.0))), 20.0, 18000.0)) end end) end
+        if n == 1 then target_param = "m10_master_vol" elseif n == 2 then target_param = "m10_cut_l" elseif n == 3 then target_param = "m10_cut_r" end
+        if target_param then register_touch(G, target_param); pcall(function() if n == 1 then params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) else params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 100.0 or 10.0))), 20.0, 18000.0)) end end) end
     elseif G.focus.state == "in" or G.focus.state == "out" then
         if not G.focus.node_x or not G.focus.node_y then return end
         local node = G.grid_map[G.focus.node_x] and G.grid_map[G.focus.node_x][G.focus.node_y]
@@ -190,9 +222,10 @@ function ScreenUI.enc(G, n, d)
         local Matrix = include('lib/matrix') 
         if n == 3 then register_touch(G, "node_lvl_" .. node.id); node.level = util.clamp((node.level or 0) + (d * 0.01), -1.0, 1.0); if Matrix.update_node_params then Matrix.update_node_params(node) end
         elseif n == 2 then
-        if node.module == 10 and node.type == "in" and (node.id == 57 or node.id == 58) then register_touch(G, "node_pan_" .. node.id); node.pan = util.clamp((node.pan or 0) + (d * 0.01), -1.0, 1.0); if Matrix.update_node_params then Matrix.update_node_params(node) end
-        elseif node.module == 10 and node.type == "out" and (node.id == 65 or node.id == 66) then register_touch(G, "m10_adc_slew"); pcall(function() params:delta("m10_adc_slew", d) end) end
-    end
+            if node.module == 10 and node.type == "in" and (node.id == 57 or node.id == 58) then register_touch(G, "node_pan_" .. node.id); node.pan = util.clamp((node.pan or 0) + (d * 0.01), -1.0, 1.0); if Matrix.update_node_params then Matrix.update_node_params(node) end
+            elseif node.module == 2 and node.type == "in" and node.id == 14 then register_touch(G, "m2_clk_thresh"); pcall(function() params:delta("m2_clk_thresh", d) end)
+            elseif node.module == 3 and node.type == "in" and node.id == 23 then register_touch(G, "m3_ping_thresh"); pcall(function() params:delta("m3_ping_thresh", d) end) end
+        end
     elseif G.focus.state == "menu" then
         if not G.focus.module_id or not G.focus.page then return end
         local def = MenuDef[G.focus.module_id][G.focus.page]
@@ -202,7 +235,7 @@ function ScreenUI.enc(G, n, d)
         if target_param then
             register_touch(G, target_param)
             pcall(function()
-                if string.find(target_param, "tune") or string.find(target_param, "cutoff") then params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 10.0 or 1.0))), 0.01, 18000.0))
+                if string.find(target_param, "tune") or string.find(target_param, "cutoff") or string.find(target_param, "damp") then params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 10.0 or 1.0))), 0.01, 18000.0))
                 elseif string.find(target_param, "fine") then params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.001 or 0.01)), -5.0, 5.0))
                 else params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) end
             end)
@@ -219,12 +252,14 @@ function ScreenUI.key(G, n, z)
             if node and n == 2 then
                 local p_id = nil
                 if node.id == 59 then p_id = "m10_cv_dest_l" elseif node.id == 60 then p_id = "m10_cv_dest_r"
-            elseif node.id == 9 then p_id = "m2_cv1_dest" elseif node.id == 10 then p_id = "m2_cv2_dest"
-            elseif node.id == 1 then p_id = "m1_fm1_mode" elseif node.id == 2 then p_id = "m1_fm2_mode"
-            elseif node.id == 3 then p_id = "m1_pv1_mode" elseif node.id == 4 then p_id = "m1_pv2_mode"
-            elseif node.id == 65 then p_id = "m10_adc_mode_l" elseif node.id == 66 then p_id = "m10_adc_mode_r" end
-            if p_id then register_touch(G, p_id); pcall(function() local p_idx = params.lookup[p_id]; if p_idx then local p = params.params[p_idx]; if p.options then params:set(p_id, params:get(p_id) == #p.options and 1 or params:get(p_id) + 1) end end end) end
-            end       
+                elseif node.id == 9 then p_id = "m2_cv1_dest" elseif node.id == 10 then p_id = "m2_cv2_dest"
+                elseif node.id == 1 then p_id = "m1_fm1_mode" elseif node.id == 2 then p_id = "m1_fm2_mode"
+                elseif node.id == 3 then p_id = "m1_pv1_mode" elseif node.id == 4 then p_id = "m1_pv2_mode"
+                elseif node.id == 24 then p_id = "m3_res_dest"
+                elseif node.id == 54 then p_id = "m9_cv_dest"
+                elseif node.id == 63 then p_id = "m10_adc_mode_l" elseif node.id == 64 then p_id = "m10_adc_mode_r" end
+                if p_id then register_touch(G, p_id); pcall(function() local p_idx = params.lookup[p_id]; if p_idx then local p = params.params[p_idx]; if p.options then params:set(p_id, params:get(p_id) == #p.options and 1 or params:get(p_id) + 1) end end end) end
+            end
         elseif G.focus.state == "menu" then
             if not G.focus.module_id or not G.focus.page then return end
             local def = MenuDef[G.focus.module_id][G.focus.page]
