@@ -1,5 +1,5 @@
--- lib/screen_ui.lua v0.513
--- CHANGELOG v0.513:
+-- lib/screen_ui.lua v0.516
+-- CHANGELOG v0.516:
 -- 1. FIX: Menús contextuales (Hold) para destinos CV y umbrales.
 -- 2. FIX: Space-Time Core UI dinámica (Tape/Reverb).
 -- 3. FIX: Nexus UI reestructurada.
@@ -12,9 +12,10 @@ local MenuDef = {
     [2] = { A = { title = "STOCHASTIC NOISE", e1 = {id="m2_slow_rate", name="SLOW RT"}, e2 = {id="m2_tilt1", name="TILT 1"}, e3 = {id="m2_tilt2", name="TILT 2"}, k2 = {id="m2_type1", name="N1"}, k3 = {id="m2_type2", name="N2"} }, B = { title = "STOCHASTIC SLEW", e1 = {id="m2_slew_shape", name="SHAPE"}, e2 = {id="m2_rise", name="RISE"}, e3 = {id="m2_fall", name="FALL"}, k2 = {id="m2_cycle_mode", name="CYCLE"} }, C = { title = "STOCHASTIC S&H", e1 = {id="m2_glide", name="GLIDE"}, e2 = {id="m2_clk_rate", name="CLOCK"}, e3 = {id="m2_prob_skew", name="SKEW"}, k2 = {id="m2_clk_mode", name="SRC"} } },
     [3] = { A = { title = "SERGE VCFQ CORE", e1 = {id="m3_agc_drive", name="AGC DRV"}, e2 = {id="m3_cutoff", name="FREQ"}, e3 = {id="m3_q", name="RES"}, e4 = {id="m3_fine", name="FINE"}, k2 = {id="m3_range", name="RNG"}, k3 = {id="m3_ping", name="PING"} }, B = { title = "SERGE VCFQ MODS", e1 = {id="m3_ping_dcy", name="PING DCY"}, e2 = {id="m3_fm_amt", name="FM AMT"}, e3 = {id="m3_notch_bal", name="NOTCH"}, e4 = {id="m3_voct_amt", name="V/OCT"} } },
     [4] = { A = { title = "1005 RING MOD", e1 = {id="m4_rm_am_mix", name="RM/AM"}, e2 = {id="m4_mod_gain", name="MOD"}, e3 = {id="m4_unmod_gain", name="UNMOD"}, e4 = {id="m4_xfade", name="XFADE"}, k2 = {id="m4_state", name="ST"} }, B = { title = "1005 VCA", e1 = {id="m4_gate_thresh", name="THRESH"}, e2 = {id="m4_vca_base", name="BASE"}, e3 = {id="m4_vca_resp", name="RESP"}, k2 = {id="m4_state", name="ST"} } },
-    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"}, k3 = {id="m5_env_src_sel", name="SRC"} } },
-    [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"}, k3 = {id="m6_env_src_sel", name="SRC"} } },[7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"}, k3 = {id="m7_env_src_sel", name="SRC"} } },
-    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"}, k3 = {id="m8_env_src_sel", name="SRC"} } },
+    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },
+    [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"} } },
+    [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"} } },
+    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },
     [9] = { A = { title = "SPACE-TIME CORE", e1 = {id="m9_t_drive", name="DRIVE"}, e2 = {id="m9_t_time", name="TIME"}, e3 = {id="m9_t_fb", name="FDBK"}, e4 = {id="m9_t_wow", name="WOW"}, k2 = {id="m9_mode", name="MODE"}, k3 = {id="m9_t_tone", name="TONE"} } },
     [10] = { A = { title = "NEXUS FILTERS", e1 = {id="m10_cut_l", name="CUT L"}, e2 = {id="m10_res_l", name="RES L"}, e3 = {id="m10_cut_r", name="CUT R"}, e4 = {id="m10_res_r", name="RES R"}, k2 = {id="m10_filt_byp", name="FILT"} }, B = { title = "NEXUS MASTER", e1 = {id="m10_master_vol", name="VOL"}, e2 = {id="thermal_drift", name="AGE"}, e3 = {id="m10_adc_slew", name="ADC SLW"}, e4 = {id="m10_drive", name="DRIVE"}, k2 = {id="m10_adc_mon", name="ADC"} } }
 }
@@ -143,6 +144,11 @@ function ScreenUI.draw_node_menu(G)
         local val = ""; pcall(function() val = params:string(p_id) end)
         screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
         screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 MODE: ")
+    elseif node.module >= 5 and node.module <= 8 and node.type == "in" and (node.id == 38 or node.id == 42 or node.id == 46 or node.id == 50) then
+        local p_id = "m" .. node.module .. "_env_src_sel"
+        local val = ""; pcall(function() val = params:string(p_id) end)
+        screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
+        screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 SRC: ")
     end
 end
 
@@ -164,7 +170,6 @@ function ScreenUI.draw_module_menu(G)
     local def = MenuDef[G.focus.module_id][G.focus.page]
     if not def then return end
 
-    -- Dynamic UI for Space-Time Core
     if G.focus.module_id == 9 then
         local mode = params:get("m9_mode")
         if mode == 1 then
@@ -230,6 +235,18 @@ function ScreenUI.enc(G, n, d)
         if not G.focus.module_id or not G.focus.page then return end
         local def = MenuDef[G.focus.module_id][G.focus.page]
         if not def then return end
+        
+        if G.focus.module_id == 9 then
+            local mode = params:get("m9_mode")
+            if mode == 1 then
+                def.e1 = {id="m9_t_drive", name="DRIVE"}; def.e2 = {id="m9_t_time", name="TIME"}
+                def.e3 = {id="m9_t_fb", name="FDBK"}; def.e4 = {id="m9_t_wow", name="WOW"}
+            else
+                def.e1 = {id="m9_r_decay", name="DECAY"}; def.e2 = {id="m9_r_bloom", name="BLOOM"}
+                def.e3 = {id="m9_r_damp", name="DAMP"}; def.e4 = {id="m9_r_predelay", name="PREDLY"}
+            end
+        end
+
         local target_param = nil
         if n == 1 then target_param = def.e1 and def.e1.id elseif n == 2 then target_param = def.e2 and def.e2.id elseif n == 3 then target_param = def.e3 and def.e3.id elseif n == 4 then target_param = def.e4 and def.e4.id end 
         if target_param then
@@ -257,13 +274,20 @@ function ScreenUI.key(G, n, z)
                 elseif node.id == 3 then p_id = "m1_pv1_mode" elseif node.id == 4 then p_id = "m1_pv2_mode"
                 elseif node.id == 24 then p_id = "m3_res_dest"
                 elseif node.id == 54 then p_id = "m9_cv_dest"
-                elseif node.id == 63 then p_id = "m10_adc_mode_l" elseif node.id == 64 then p_id = "m10_adc_mode_r" end
+                elseif node.id == 63 then p_id = "m10_adc_mode_l" elseif node.id == 64 then p_id = "m10_adc_mode_r"
+                elseif node.module >= 5 and node.module <= 8 and (node.id == 38 or node.id == 42 or node.id == 46 or node.id == 50) then p_id = "m" .. node.module .. "_env_src_sel" end
                 if p_id then register_touch(G, p_id); pcall(function() local p_idx = params.lookup[p_id]; if p_idx then local p = params.params[p_idx]; if p.options then params:set(p_id, params:get(p_id) == #p.options and 1 or params:get(p_id) + 1) end end end) end
             end
         elseif G.focus.state == "menu" then
             if not G.focus.module_id or not G.focus.page then return end
             local def = MenuDef[G.focus.module_id][G.focus.page]
             if not def then return end
+            
+            if G.focus.module_id == 9 then
+                local mode = params:get("m9_mode")
+                if mode == 1 then def.k3 = {id="m9_t_tone", name="TONE"} else def.k3 = {id="m9_r_mod", name="MOD"} end
+            end
+
             local target_param = nil
             if n == 2 and def.k2 then target_param = type(def.k2) == "table" and def.k2.id or def.k2 end
             if n == 3 and def.k3 then target_param = type(def.k3) == "table" and def.k3.id or def.k3 end
