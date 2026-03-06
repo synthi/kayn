@@ -1,10 +1,8 @@
--- lib/screen_ui.lua v0.518
+-- lib/screen_ui.lua v0.520
+-- CHANGELOG v0.520:
+-- 1. FIX FATAL: Restaurada la función ScreenUI.draw(G) amputada accidentalmente en v0.518, solucionando el crash de pantalla negra.
 -- CHANGELOG v0.518:
--- 1. FIX: Aceleración balística de encoders ahora lee dinámicamente el controlspec para aplicar util.clamp infalible.
--- CHANGELOG v0.516:
--- 1. FIX: Menús contextuales (Hold) para destinos CV y umbrales.
--- 2. FIX: Space-Time Core UI dinámica (Tape/Reverb).
--- 3. FIX: Nexus UI reestructurada.
+-- 1. FIX: Aceleración balística de encoders ahora lee dinámicamente el controlspec para aplicar util.clamp infalible
 
 local ScreenUI = {}
 ScreenUI.ping_flash = {[3] = 0}
@@ -196,12 +194,19 @@ function ScreenUI.draw_module_menu(G)
         else screen.level(15); screen.move(126, 45); screen.text_right(k2_val); local w = screen.text_extents(k2_val); screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 " .. k2_name .. (k2_name ~= "" and ": " or "")) end
     end
     if def.k3 then 
-        local k3_id = type(def.k3) == "table" and def.k3.id or def.k3; local k3_name = type(def.k3) == "table" and def.k3.name or "K3"
-        local k3_val = ""; pcall(function() k3_val = clean_str(params:string(k3_id)) end)
-        local is_ping = (k3_name == "PING"); local is_flashing = is_ping and (util.time() - (ScreenUI.ping_flash[G.focus.module_id] or 0) < 0.15)
-        if is_flashing then screen.level(15); screen.move(126, 60); screen.text_right("PING!")
-        else screen.level(15); screen.move(126, 60); screen.text_right(k3_val); local w = screen.text_extents(k3_val); screen.level(4); screen.move(126 - w - 2, 60); screen.text_right("K3 " .. k3_name .. (k3_name ~= "" and ": " or "")) end
+            local k3_id = type(def.k3) == "table" and def.k3.id or def.k3; local k3_name = type(def.k3) == "table" and def.k3.name or "K3"
+            local k3_val = ""; pcall(function() k3_val = clean_str(params:string(k3_id)) end)
+            local is_ping = (k3_name == "PING"); local is_flashing = is_ping and (util.time() - (ScreenUI.ping_flash[G.focus.module_id] or 0) < 0.15)
+            if is_flashing then screen.level(15); screen.move(126, 60); screen.text_right("PING!")
+            else screen.level(15); screen.move(126, 60); screen.text_right(k3_val); local w = screen.text_extents(k3_val); screen.level(4); screen.move(126 - w - 2, 60); screen.text_right("K3 " .. k3_name .. (k3_name ~= "" and ": " or "")) end
+        end
     end
+
+function ScreenUI.draw(G)
+    if not G or not G.grid_map or not G.nodes or not G.focus then return end
+    if G.focus.state == "idle" or G.focus.state == "patching" then ScreenUI.draw_idle(G)
+    elseif G.focus.state == "in" or G.focus.state == "out" then ScreenUI.draw_node_menu(G)
+    elseif G.focus.state == "menu" then ScreenUI.draw_module_menu(G) end
 end
 
 local last_enc_time = 0
