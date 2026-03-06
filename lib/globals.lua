@@ -1,13 +1,14 @@
--- lib/globals.lua v0.510
--- CHANGELOG v0.510:
--- 1. OPTIMIZACIÓN: Inyección de tx_idx y rx_idx en los nodos para mapeo cruzado con SuperCollider.
+-- lib/globals.lua v0.513
+-- CHANGELOG v0.513:
+-- 1. ARQUITECTURA: 64 nodos exactos. 32 TX, 32 RX.
+-- 2. MÓDULOS: Añadido Space-Time Core (Mod 9). Nexus reestructurado.
 
 local G = {}
 
 G.booting = true
 G.screen_dirty = true
 G.node_levels = {}
-for i = 1, 66 do G.node_levels[i] = 0 end
+for i = 1, 64 do G.node_levels[i] = 0 end
 
 G.focus = { state = "idle", module_id = nil, page = nil, node_x = nil, node_y = nil, hold_time = 0 }
 G.shift_held = false
@@ -35,8 +36,8 @@ G.patch = {}
 G.nodes = {}
 G.grid_map = {}
 
-G.module_by_col = {1,1, 2,2,2, 3,3, 4,4, 5, 6, 7, 8, 9, 10,10}
-G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP", "CYBER VCA 1", "CYBER VCA 2", "CYBER VCA 3", "CYBER VCA 4", "CYBER VCA 5", "NEXUS"}
+G.module_by_col = {1,1, 2,2,2, 3,3, 4,4, 5, 6, 7, 8, 14, 15,16}
+G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP", "CYBER VCA 1", "CYBER VCA 2", "CYBER VCA 3", "CYBER VCA 4", "SPACE-TIME CORE", "NEXUS"}
 
 function G.init_nodes()
     for x = 1, 16 do G.grid_map[x] = {}; for y = 1, 8 do G.grid_map[x][y] = nil end end
@@ -84,8 +85,8 @@ function G.init_nodes()
     add_node(8, 6, "out", 4, "Main Out"); add_node(8, 7, "out", 4, "Ring Mod Out")
     add_node(9, 6, "out", 4, "Sum Out"); add_node(9, 7, "out", 4, "Diff Out")
 
-    -- MODS 5-9: CYBER VCAs (IDs 37-56)
-    for i=0, 4 do
+    -- MODS 5-8: CYBER VCAs 1-4 (IDs 37-52)
+    for i=0, 3 do
         local col = 10 + i; local mod_idx = 5 + i
         add_node(col, 1, "in", mod_idx, "Audio In")
         add_node(col, 2, "in", mod_idx, "CV In")
@@ -93,14 +94,19 @@ function G.init_nodes()
         add_node(col, 7, "out", mod_idx, "Env Follower Out")
     end
 
-    -- MOD 10: NEXUS (IDs 57-66)
+    -- MOD 9: SPACE-TIME CORE (IDs 53-56)
+    add_node(14, 1, "in", 9, "Audio In (Mono)")
+    add_node(14, 2, "in", 9, "CV In")
+    add_node(14, 6, "out", 9, "FX Out L")
+    add_node(14, 7, "out", 9, "FX Out R")
+
+    -- MOD 10: NEXUS (IDs 57-64)
     add_node(15, 1, "in", 10, "Modular In L"); add_node(16, 1, "in", 10, "Modular In R")
     add_node(15, 2, "in", 10, "CV L In"); add_node(16, 2, "in", 10, "CV R In")
     add_node(15, 6, "out", 10, "Master Out L"); add_node(16, 6, "out", 10, "Master Out R")
-    add_node(15, 7, "out", 10, "Tape Send L"); add_node(16, 7, "out", 10, "Tape Send R")
-    add_node(15, 8, "out", 10, "ADC Out L"); add_node(16, 8, "out", 10, "ADC Out R")
+    add_node(15, 7, "out", 10, "ADC Out L"); add_node(16, 7, "out", 10, "ADC Out R")
 
-    for src = 1, 66 do G.patch[src] = {}; for dst = 1, 66 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0, current_gain = 0.0 } end end
+    for src = 1, 64 do G.patch[src] = {}; for dst = 1, 64 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0, current_gain = 0.0 } end end
 end
 
 return G
