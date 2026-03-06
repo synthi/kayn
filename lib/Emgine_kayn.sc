@@ -315,28 +315,29 @@ Engine_Kayn : CroneEngine {
             tape_out_r = DelayC.ar(tape_filt, 0.05, 0.015);
 
             // --- BLOOM REVERB ---
-            rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.2); // >1.0 allows infinite freeze
-            rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 1.0);
+            rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1); 
+            rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0);
             rev_damp = (Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000);
             rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 0.2);
 
             rev_in = DelayN.ar(aud_in, 0.2, rev_predelay);
             
-            ap1 = AllpassN.ar(rev_in, 0.1, 0.023, rev_bloom);
-            ap2 = AllpassN.ar(ap1, 0.1, 0.031, rev_bloom);
-            ap3 = AllpassN.ar(ap2, 0.1, 0.047, rev_bloom);
-            ap4 = AllpassN.ar(ap3, 0.1, 0.073, rev_bloom);
+            ap1 = AllpassN.ar(rev_in, 0.1, 0.017, rev_bloom);
+            ap2 = AllpassN.ar(ap1, 0.1, 0.023, rev_bloom);
+            ap3 = AllpassN.ar(ap2, 0.1, 0.031, rev_bloom);
+            ap4 = AllpassN.ar(ap3, 0.1, 0.047, rev_bloom);
 
             rev_local = LocalIn.ar(2);
-            rev_fb_sig = ap4 + (rev_local * rev_decay);
+            rev_fb_sig = (ap4 ! 2) + (rev_local * rev_decay);
+            rev_fb_sig = HPF.ar(rev_fb_sig, 80).tanh; // DC Blocker + Softclip for infinite freeze
 
             mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
             mod_depth = Select.kr(r_mod,[0.0, 0.002, 0.008, 0.02]);
             lfo_l = SinOsc.ar(mod_rate) * mod_depth;
             lfo_r = SinOsc.ar(mod_rate * 1.1) * mod_depth;
 
-            rev_del_l = DelayC.ar(rev_fb_sig[0], 0.2, 0.113 + lfo_l);
-            rev_del_r = DelayC.ar(rev_fb_sig[1], 0.2, 0.149 + lfo_r);
+            rev_del_l = DelayC.ar(rev_fb_sig[0], 0.5, 0.113 + lfo_l);
+            rev_del_r = DelayC.ar(rev_fb_sig[1], 0.5, 0.149 + lfo_r);
 
             rev_filt_l = LPF.ar(rev_del_l, rev_damp);
             rev_filt_r = LPF.ar(rev_del_r, rev_damp);
@@ -406,8 +407,7 @@ Engine_Kayn : CroneEngine {
         synth_matrix_amps = Synth.new(\Kayn_MatrixAmps,[], context.xg, \addToHead);
         32.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
         
-        // DIAGNOSTIC SHIFT: ADC Out R is mapped to tx_idx=0. Osc 1 Out is mapped to tx_idx=1.
-        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+30, \out_r, bus_nodes_tx.index+31, \lvl_l, bus_levels.index+63, \lvl_r, bus_levels.index+64, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
+        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+30, \out_r, bus_nodes_tx.index+31, \lvl_l, bus_levels.index+62, \lvl_r, bus_levels.index+63, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
         
         synth_mods[0] = Synth.new(\Kayn_1023,[\in_fm1, bus_nodes_rx.index+0, \in_fm2, bus_nodes_rx.index+1, \in_pv1, bus_nodes_rx.index+2, \in_pv2, bus_nodes_rx.index+3, \out_o1, bus_nodes_tx.index+0, \out_o2, bus_nodes_tx.index+1, \out_i1, bus_nodes_tx.index+2, \out_i2, bus_nodes_tx.index+3, \lvl_fm1, bus_levels.index+0, \lvl_fm2, bus_levels.index+1, \lvl_pv1, bus_levels.index+2, \lvl_pv2, bus_levels.index+3, \lvl_o1, bus_levels.index+4, \lvl_o2, bus_levels.index+5, \lvl_i1, bus_levels.index+6, \lvl_i2, bus_levels.index+7, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         synth_mods[1] = Synth.new(\Kayn_Stochastic,[\in_cv1, bus_nodes_rx.index+4, \in_cv2, bus_nodes_rx.index+5, \in_sig, bus_nodes_rx.index+6, \in_rate, bus_nodes_rx.index+7, \in_samp, bus_nodes_rx.index+8, \in_trig, bus_nodes_rx.index+9, \out_n1, bus_nodes_tx.index+4, \out_n2, bus_nodes_tx.index+5, \out_smooth, bus_nodes_tx.index+6, \out_cycle, bus_nodes_tx.index+7, \out_stepped, bus_nodes_tx.index+8, \out_coupler, bus_nodes_tx.index+9, \lvl_cv1, bus_levels.index+8, \lvl_cv2, bus_levels.index+9, \lvl_sig, bus_levels.index+10, \lvl_rate, bus_levels.index+11, \lvl_samp, bus_levels.index+12, \lvl_trig, bus_levels.index+13, \lvl_n1, bus_levels.index+14, \lvl_n2, bus_levels.index+15, \lvl_smooth, bus_levels.index+16, \lvl_cycle, bus_levels.index+17, \lvl_stepped, bus_levels.index+18, \lvl_coupler, bus_levels.index+19, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
