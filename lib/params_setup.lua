@@ -1,5 +1,5 @@
--- lib/params_setup.lua v0.513
--- CHANGELOG v0.513:
+-- lib/params_setup.lua v0.515
+-- CHANGELOG v0.515: fixes
 -- 1. FIX: Añadidos parámetros de Space-Time Core (Mod 9).
 -- 2. FIX: Reestructuración de Nexus (Mod 10).
 -- 3. FIX: Comando m3_ping envía un '1' para evitar crash en Fates.
@@ -101,7 +101,7 @@ function Params.init(G)
         add_node_params(37 + ((i-1)*4), 40 + ((i-1)*4))
     end
 
-    params:add_group("MOD 9: SPACE-TIME CORE", 17)
+    params:add_group("MOD 9: SPACE-TIME CORE", 16)
     params:add{type = "option", id = "m9_mode", name = "Algorithm", options = {"TAPE", "REVERB"}, default = 1, action = function(x) if not G.booting then engine.m9_mode(x - 1); G.screen_dirty = true end end}
     params:add{type = "option", id = "m9_cv_dest", name = "CV Dest", options = {"E1", "E2", "E3", "E4"}, default = 1, action = function(x) if not G.booting then engine.m9_cv_dest(x - 1) end end}
     params:add{type = "control", id = "m9_t_drive", name = "Tape Drive", controlspec = controlspec.new(0.1, 5.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m9_t_drive(x) end end}
