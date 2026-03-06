@@ -1,17 +1,15 @@
-// lib/Engine_Kayn.sc v0.518
+// lib/Engine_Kayn.sc v0.521
+// CHANGELOG v0.521:
+// 1. FIX FATAL: Erradicados los múltiples LocalIn/Out en SpaceTime que colapsaban el motor SC.
+// 2. DSP: Reverb reescrita a topología Schroeder/Moorer (6x CombL + 2x AllpassN) para decay infinito real.
+// 3. DSP: Tape Echo actualizado con saturación asimétrica, Head Bump, Wow inercial y bus de feedback dedicado.
 // CHANGELOG v0.518:
 // 1. ARQUITECTURA: Implementada DMZ 34x34 (Dummy Nodes en índices 0 y 1) para evadir el bug de solapamiento de memoria ALSA/Jackd en Norns Fates.
-// 2. DSP: Space-Time Core reescrito. Eliminado HPF en Reverb para decay infinito. Modulación difusa (LFNoise2). Tape con tap estéreo independiente (Haas orgánico).
-// CHANGELOG v0.516:
-// 1. ARQUITECTURA: Topología exacta de 32 TX y 32 RX. Implementado "Diagnostic Shift" para aislar el índice 0.
-// 2. FIX FATAL: Corregido el colapso matemático (NaN) en los VCOs que silenciaba el motor.
-// 3. DSP: Nuevo módulo Space-Time Core (Tape Echo / Bloom Reverb) con Decay infinito y Modulación.
-// 4. DSP: VCOs con FM Lineal (post-exp) y FM Exponencial (pre-exp).
-// 5. DSP: Extractores de Trigger (Schmidt + Trig1) en Ping In y S&H Trig In.
 
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
     var <synth_matrix_amps, <synth_matrix_rows, <synth_mods, <synth_adc;
+    var <bus_tape_fb; // Bus dedicado para el feedback del Tape Echo
     var matrix_state, ca3080_node_buf, ca3080_master_buf;
     
     *new { arg context, doneCallback; ^super.new(context, doneCallback); }
@@ -24,6 +22,10 @@ Engine_Kayn : CroneEngine {
         bus_levels = Bus.control(context.server, 64);
         bus_pans = Bus.control(context.server, 64);
         bus_physics = Bus.control(context.server, 10);
+        
+        // Bus estéreo aislado para el feedback del Tape Echo
+        bus_tape_fb = Bus.audio(context.server, 2);
+        
         64.do { |i| bus_levels.setAt(i, 0.33) };
         
         synth_mods = Array.newClear(10);
@@ -281,15 +283,23 @@ Engine_Kayn : CroneEngine {
 
         SynthDef(\Kayn_SpaceTime, {
             arg in_aud, in_cv, out_l, out_r, lvl_aud, lvl_cv, lvl_ol, lvl_or,
-                mode=0, cv_dest=0,
+                mode=0, cv_dest=0, tape_fb_bus=0,
                 t_drive=1.0, t_time=0.3, t_fb=0.4, t_wow=0.0, t_tone=0,
                 r_decay=0.5, r_bloom=0.5, r_damp=10000, r_predelay=0.0, r_mod=0,
                 phys_bus, shaper_buf;
 
             var morph_lag = In.kr(phys_bus + 7);
             var aud_in, cv_in, cv_d0, cv_d1, cv_d2, cv_d3;
-            var tape_time, tape_fb, tape_wow_amt, tape_drive, tape_tone_freq, tape_local, tape_in_sig, wow_sig, tape_del_l, tape_del_r, tape_sat_l, tape_sat_r, tape_filt_l, tape_filt_r, tape_out_l, tape_out_r;
-            var rev_decay, rev_bloom, rev_damp, rev_predelay, rev_in, ap1, ap2, ap3, ap4, rev_local, rev_fb_sig, mod_rate, mod_depth, lfo_l, lfo_r, rev_del_l, rev_del_r, rev_filt_l, rev_filt_r, rev_out_l, rev_out_r;
+            
+            // Tape Vars
+            var tape_time, tape_fb_amt, tape_wow_amt, tape_drive, tape_tone_freq, tape_erosion;
+            var tape_fb_in, tape_in_sig, shared_wow, shared_flutter, shared_mod, tape_del_l, tape_del_r;
+            var head_bump, tape_sat, tape_filt, dust_trig, dropout_env, tape_out_l, tape_out_r;
+            
+            // Reverb Vars
+            var rev_decay_time, rev_bloom, rev_damp, rev_predelay, rev_in;
+            var mod_rate, mod_depth, combs_l, combs_r, ap_l, ap_r, rev_filt_l, rev_filt_r, rev_out_l, rev_out_r;
+            
             var final_l, final_r;
 
             aud_in = InFeedback.ar(in_aud) * In.kr(lvl_aud);
@@ -300,67 +310,83 @@ Engine_Kayn : CroneEngine {
             cv_d2 = cv_in * InRange.ar(K2A.ar(cv_dest), 1.5, 2.5);
             cv_d3 = cv_in * (K2A.ar(cv_dest) > 2.5);
 
-            // --- TAPE ECHO ---
+            // ==========================================
+            // --- TAPE ECHO (Avant_lab_V Topology) ---
+            // ==========================================
             tape_drive = (Lag.kr(t_drive, morph_lag) + cv_d0).clip(0.1, 5.0);
             tape_time = (Lag.kr(t_time, morph_lag) + (cv_d1 * 2.0)).clip(0.01, 4.0);
-            tape_fb = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
+            tape_fb_amt = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
             tape_wow_amt = (Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0);
             tape_tone_freq = Select.kr(t_tone,[18000, 8000, 4000, 1500]);
+            tape_erosion = Select.kr(t_tone, [0.0, 0.0, 0.1, 0.3]); // Dropouts at lower tones
 
-            tape_local = LocalIn.ar(1);
-            tape_in_sig = aud_in + (tape_local * tape_fb);
-            wow_sig = SinOsc.ar(LFNoise2.kr(0.5).range(0.5, 3.0)) * tape_wow_amt * 0.02;
-            
-            // Haas effect: L reads tape_time, R reads tape_time * 1.02 + 0.005
-            tape_del_l = DelayC.ar(tape_in_sig, 4.0, tape_time + wow_sig);
-            tape_del_r = DelayC.ar(tape_in_sig, 4.0, (tape_time * 1.02) + 0.005 + wow_sig);
-            
-            tape_sat_l = (tape_del_l * tape_drive).tanh / tape_drive;
-            tape_sat_r = (tape_del_r * tape_drive).tanh / tape_drive;
-            
-            tape_filt_l = LPF.ar(tape_sat_l, tape_tone_freq);
-            tape_filt_r = LPF.ar(tape_sat_r, tape_tone_freq);
-            
-            LocalOut.ar(tape_filt_l); // Feedback mono from L to keep it stable
+            // Dedicated Feedback Bus (No LocalIn/Out)
+            tape_fb_in = InFeedback.ar(tape_fb_bus, 2);
+            tape_in_sig = (aud_in ! 2) + (tape_fb_in * tape_fb_amt);
 
-            tape_out_l = tape_filt_l;
-            tape_out_r = tape_filt_r;
+            // Wow & Flutter (Inertial)
+            shared_wow = OnePole.kr(LFNoise2.kr(Rand(0.5, 2.0)) * tape_wow_amt * 0.005, 0.95);
+            shared_flutter = LFNoise1.kr(15) * tape_wow_amt * 0.0005;
+            shared_mod = shared_wow + shared_flutter;
 
-            // --- BLOOM REVERB ---
-            rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1); 
+            // Haas Effect Stereo Delay
+            tape_del_l = DelayC.ar(tape_in_sig[0], 4.0, tape_time + shared_mod);
+            tape_del_r = DelayC.ar(tape_in_sig[1], 4.0, (tape_time * 1.02) + 0.005 + shared_mod);
+
+            // Asymmetric Saturation & Head Bump
+            head_bump = BPeakEQ.ar([tape_del_l, tape_del_r], 100, 1.0, tape_drive * 3.0);
+            tape_sat = ((head_bump * (1.0 + tape_drive)) + 0.2).tanh - 0.2;
+            tape_sat = tape_sat / (1.0 + (tape_drive * 0.5)); // Gain compensation
+            tape_sat = LeakDC.ar(tape_sat);
+
+            // Tone & Erosion
+            tape_filt = LPF.ar(tape_sat, tape_tone_freq);
+            dust_trig = Dust.kr(tape_erosion * 15);
+            dropout_env = Decay.kr(dust_trig, 0.1);
+            tape_filt = tape_filt * (1.0 - (dropout_env * tape_erosion).clip(0, 0.9));
+
+            // Write to Feedback Bus
+            Out.ar(tape_fb_bus, tape_filt);
+
+            tape_out_l = tape_filt[0];
+            tape_out_r = tape_filt[1];
+
+            // ==========================================
+            // --- BLOOM REVERB (Schroeder/Moorer) ---
+            // ==========================================
+            // r_decay maps to 0.1s -> 100s (Infinite Freeze)
+            rev_decay_time = LinExp.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1), 0.0, 1.1, 0.1, 100.0); 
             rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0);
             rev_damp = (Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000);
             rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 0.2);
 
-            rev_in = DelayN.ar(aud_in, 0.2, rev_predelay);
-            
-            ap1 = AllpassN.ar(rev_in, 0.1, 0.017, rev_bloom);
-            ap2 = AllpassN.ar(ap1, 0.1, 0.023, rev_bloom);
-            ap3 = AllpassN.ar(ap2, 0.1, 0.031, rev_bloom);
-            ap4 = AllpassN.ar(ap3, 0.1, 0.047, rev_bloom);
+            rev_in = DelayN.ar(aud_in ! 2, 0.2, rev_predelay);
 
-            rev_local = LocalIn.ar(2);
-            rev_fb_sig = (ap4 ! 2) + (rev_local * rev_decay);
-            rev_fb_sig = rev_fb_sig.tanh; // Softclip for infinite freeze, NO HPF
-
-            mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
+            mod_rate = Select.kr(r_mod, [0.0, 0.5, 1.2, 5.0]);
             mod_depth = Select.kr(r_mod,[0.0, 0.0005, 0.0015, 0.003]);
-            lfo_l = LFNoise2.ar(mod_rate) * mod_depth;
-            lfo_r = LFNoise2.ar(mod_rate * 1.1) * mod_depth;
 
-            rev_del_l = DelayC.ar(rev_fb_sig[0], 0.5, 0.113 + lfo_l);
-            rev_del_r = DelayC.ar(rev_fb_sig[1], 0.5, 0.149 + lfo_r);
+            // Parallel Comb Filters (The Tank)
+            combs_l = 6.collect { CombL.ar(rev_in[0], 0.2, Rand(0.03, 0.07) + (LFNoise2.kr(mod_rate) * mod_depth), rev_decay_time) }.sum;
+            combs_r = 6.collect { CombL.ar(rev_in[1], 0.2, Rand(0.03, 0.07) + (LFNoise2.kr(mod_rate * 1.1) * mod_depth), rev_decay_time) }.sum;
 
-            rev_filt_l = LPF.ar(rev_del_l, rev_damp);
-            rev_filt_r = LPF.ar(rev_del_r, rev_damp);
+            // Series Allpass Filters (Diffusion)
+            ap_l = combs_l; ap_r = combs_r;
+            2.do { 
+                ap_l = AllpassN.ar(ap_l, 0.05, Rand(0.01, 0.05), rev_bloom * 2.0); 
+                ap_r = AllpassN.ar(ap_r, 0.05, Rand(0.01, 0.05), rev_bloom * 2.0); 
+            };
 
-            LocalOut.ar([rev_filt_r, rev_filt_l]); // Cross-feedback
+            // Damping
+            rev_filt_l = LPF.ar(ap_l, rev_damp) * 0.2;
+            rev_filt_r = LPF.ar(ap_r, rev_damp) * 0.2;
 
             rev_out_l = rev_filt_l;
             rev_out_r = rev_filt_r;
 
+            // ==========================================
             // --- MIX ---
-            final_l = Select.ar(K2A.ar(mode),[tape_out_l, rev_out_l]);
+            // ==========================================
+            final_l = Select.ar(K2A.ar(mode), [tape_out_l, rev_out_l]);
             final_r = Select.ar(K2A.ar(mode),[tape_out_r, rev_out_r]);
 
             Out.ar(out_l, Shaper.ar(shaper_buf, final_l.clip(-1.0, 1.0)) * In.kr(lvl_ol));
@@ -433,7 +459,8 @@ Engine_Kayn : CroneEngine {
             synth_mods[4+i] = Synth.new(\Kayn_CyberVCA,[\in_aud, bus_nodes_rx.index+rx_idx, \in_cv, bus_nodes_rx.index+rx_idx+1, \out_aud, bus_nodes_tx.index+tx_idx, \out_env, bus_nodes_tx.index+tx_idx+1, \lvl_aud, bus_levels.index+lvl_rx, \lvl_cv, bus_levels.index+lvl_rx+1, \lvl_oaud, bus_levels.index+lvl_tx, \lvl_oenv, bus_levels.index+lvl_tx+1, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         };
         
-        synth_mods[8] = Synth.new(\Kayn_SpaceTime,[\in_aud, bus_nodes_rx.index+28, \in_cv, bus_nodes_rx.index+29, \out_l, bus_nodes_tx.index+28, \out_r, bus_nodes_tx.index+29, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        // SpaceTime ahora recibe el bus de feedback dedicado
+        synth_mods[8] = Synth.new(\Kayn_SpaceTime,[\in_aud, bus_nodes_rx.index+28, \in_cv, bus_nodes_rx.index+29, \out_l, bus_nodes_tx.index+28, \out_r, bus_nodes_tx.index+29, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \tape_fb_bus, bus_tape_fb.index, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
         synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+30, \in_mr, bus_nodes_rx.index+31, \in_al, bus_nodes_rx.index+32, \in_ar, bus_nodes_rx.index+33, \out_ml, bus_nodes_tx.index+30, \out_mr, bus_nodes_tx.index+31, \hw_out_l, context.out_b.index, \hw_out_r, context.out_b.index+1, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+60, \lvl_omr, bus_levels.index+61, \phys_bus, bus_physics.index, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
 
@@ -498,5 +525,6 @@ Engine_Kayn : CroneEngine {
     free {
         synth_matrix_amps.free; synth_matrix_rows.do({ |s| if(s.notNil, { s.free }) }); synth_mods.do({ |s| if(s.notNil, { s.free }) }); synth_adc.free;
         ca3080_node_buf.free; ca3080_master_buf.free; bus_nodes_tx.free; bus_nodes_rx.free; bus_levels.free; bus_pans.free; bus_physics.free;
+        bus_tape_fb.free; // Liberar el bus de feedback
     }
 }
