@@ -1,5 +1,5 @@
-// lib/Engine_Kayn.sc v0.513
-// CHANGELOG v0.513:
+// lib/Engine_Kayn.sc v0.515
+// CHANGELOG v0.515: fixes
 // 1. ARQUITECTURA: Topología exacta de 32 TX y 32 RX. Evita el Buffer Overflow en Fates.
 // 2. FIX FATAL: Comando m3_ping cambiado a "i" para evitar crash de Matron.
 // 3. DSP: Nuevo módulo Space-Time Core (Tape Echo / Bloom Reverb).
@@ -77,8 +77,8 @@ Engine_Kayn : CroneEngine {
             exp_fm1 = fm1_in * InRange.ar(K2A.ar(fm1_mode), 0.5, 1.5);
             morph_mod1 = fm1_in * (K2A.ar(fm1_mode) > 1.5);
             
-            cv_sum1 = Select.kr(range1,[tune1, tune1*0.001]) + fine1 + (pv1 * pv1_mode) + exp_fm1;
-            exp_core1 = 2.0 ** (cv_sum1 * 10.0);
+            cv_sum1 = (pv1 * pv1_mode) + exp_fm1;
+            exp_core1 = K2A.ar(Select.kr(range1,[tune1, tune1*0.001]) + fine1) * (2.0 ** (cv_sum1 * 10.0));
             freq1 = (exp_core1 + (lin_fm1 * 2000.0)).max(0.0);
             
             ph1 = Phasor.ar(0, freq1 * SampleDur.ir, 0, 1);
@@ -97,8 +97,8 @@ Engine_Kayn : CroneEngine {
             exp_fm2 = fm2_in * InRange.ar(K2A.ar(fm2_mode), 0.5, 1.5);
             pwm_mod2 = fm2_in * (K2A.ar(fm2_mode) > 1.5);
             
-            cv_sum2 = Select.kr(range2,[tune2, tune2*0.001]) + fine2 + (pv2 * pv2_mode) + exp_fm2;
-            exp_core2 = 2.0 ** (cv_sum2 * 10.0);
+            cv_sum2 = (pv2 * pv2_mode) + exp_fm2;
+            exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001]) + fine2) * (2.0 ** (cv_sum2 * 10.0));
             freq2 = (exp_core2 + (lin_fm2 * 2000.0)).max(0.0);
             
             ph2 = Phasor.ar(0, freq2 * SampleDur.ir, 0, 1);
@@ -192,7 +192,7 @@ Engine_Kayn : CroneEngine {
             ping_env = EnvGen.ar(Env.perc(0.001, ping_dcy), ping_trig);
             exciter = Decay.ar(K2A.ar(ping_trig), 0.01) * 5.0;
             
-            f_mod = (K2A.ar(cutoff) + fine) * (2.0 ** ((fm * fm_amt) + freq_cv2 * 10.0)) * (2.0 ** (ping_env * 2.0));
+            f_mod = (K2A.ar(cutoff) + fine) * (2.0 ** (((fm * fm_amt) + freq_cv2) * 10.0)) * (2.0 ** (ping_env * 2.0));
             f_mod = f_mod * Select.kr(range,[1.0, 0.01]);
             f_mod = f_mod.clip(0.1, 20000);
             
