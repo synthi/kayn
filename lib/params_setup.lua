@@ -1,6 +1,6 @@
--- lib/params_setup.lua v0.515
--- CHANGELOG v0.515: fixes
--- 1. FIX: Añadidos parámetros de Space-Time Core (Mod 9).
+-- lib/params_setup.lua v0.516
+-- CHANGELOG v0.516:
+-- 1. FIX: Añadidos parámetros de Space-Time Core (Mod 9) con mapeo exacto de Encoders.
 -- 2. FIX: Reestructuración de Nexus (Mod 10).
 -- 3. FIX: Comando m3_ping envía un '1' para evitar crash en Fates.
 
@@ -108,11 +108,11 @@ function Params.init(G)
     params:add{type = "control", id = "m9_t_time", name = "Tape Time", controlspec = controlspec.new(0.01, 4.0, 'lin', 0.01, 0.3, "s"), action = function(x) if not G.booting then engine.m9_t_time(x) end end}
     params:add{type = "control", id = "m9_t_fb", name = "Tape Feedback", controlspec = controlspec.new(0.0, 1.2, 'lin', 0.01, 0.4), action = function(x) if not G.booting then engine.m9_t_fb(x) end end}
     params:add{type = "control", id = "m9_t_wow", name = "Tape Wow", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m9_t_wow(x) end end}
-    params:add{type = "option", id = "m9_t_tone", name = "Tape Tone", options = {"15k", "8k", "4k", "2k"}, default = 1, action = function(x) if not G.booting then engine.m9_t_tone(x - 1) end end}
-    params:add{type = "control", id = "m9_r_decay", name = "Rev Decay", controlspec = controlspec.new(0.01, 0.99, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_decay(x) end end}
-    params:add{type = "control", id = "m9_r_bloom", name = "Rev Bloom", controlspec = controlspec.new(0.1, 0.9, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_bloom(x) end end}
+    params:add{type = "option", id = "m9_t_tone", name = "Tape Tone", options = {"18k", "8k", "4k", "1.5k"}, default = 1, action = function(x) if not G.booting then engine.m9_t_tone(x - 1) end end}
+    params:add{type = "control", id = "m9_r_decay", name = "Rev Decay", controlspec = controlspec.new(0.0, 1.2, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_decay(x) end end}
+    params:add{type = "control", id = "m9_r_bloom", name = "Rev Bloom", controlspec = controlspec.new(0.01, 1.0, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_bloom(x) end end}
     params:add{type = "control", id = "m9_r_damp", name = "Rev Damp", controlspec = controlspec.new(200.0, 18000.0, 'exp', 0.01, 10000.0, "Hz"), action = function(x) if not G.booting then engine.m9_r_damp(x) end end}
-    params:add{type = "control", id = "m9_r_predelay", name = "Rev PreDelay", controlspec = controlspec.new(0.0, 0.15, 'lin', 0.001, 0.0, "s"), action = function(x) if not G.booting then engine.m9_r_predelay(x) end end}
+    params:add{type = "control", id = "m9_r_predelay", name = "Rev PreDelay", controlspec = controlspec.new(0.0, 0.2, 'lin', 0.001, 0.0, "s"), action = function(x) if not G.booting then engine.m9_r_predelay(x) end end}
     params:add{type = "option", id = "m9_r_mod", name = "Rev Mod", options = {"OFF", "LIGHT", "DEEP", "CHAOS"}, default = 1, action = function(x) if not G.booting then engine.m9_r_mod(x - 1) end end}
     add_node_params(53, 56)
 
