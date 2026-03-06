@@ -1,8 +1,8 @@
-// lib/Engine_Kayn.sc v0.515
-// CHANGELOG v0.515: fixes
-// 1. ARQUITECTURA: Topología exacta de 32 TX y 32 RX. Evita el Buffer Overflow en Fates.
-// 2. FIX FATAL: Comando m3_ping cambiado a "i" para evitar crash de Matron.
-// 3. DSP: Nuevo módulo Space-Time Core (Tape Echo / Bloom Reverb).
+// lib/Engine_Kayn.sc v0.516
+// CHANGELOG v0.516:
+// 1. ARQUITECTURA: Topología exacta de 32 TX y 32 RX. Implementado "Diagnostic Shift" para aislar el índice 0.
+// 2. FIX FATAL: Corregido el colapso matemático (NaN) en los VCOs que silenciaba el motor.
+// 3. DSP: Nuevo módulo Space-Time Core (Tape Echo / Bloom Reverb) con Decay infinito y Modulación.
 // 4. DSP: VCOs con FM Lineal (post-exp) y FM Exponencial (pre-exp).
 // 5. DSP: Extractores de Trigger (Schmidt + Trig1) en Ping In y S&H Trig In.
 
@@ -77,8 +77,8 @@ Engine_Kayn : CroneEngine {
             exp_fm1 = fm1_in * InRange.ar(K2A.ar(fm1_mode), 0.5, 1.5);
             morph_mod1 = fm1_in * (K2A.ar(fm1_mode) > 1.5);
             
-            cv_sum1 = (pv1 * pv1_mode) + exp_fm1;
-            exp_core1 = K2A.ar(Select.kr(range1,[tune1, tune1*0.001]) + fine1) * (2.0 ** (cv_sum1 * 10.0));
+            cv_sum1 = (fine1 * 0.1) + (pv1 * pv1_mode) + exp_fm1;
+            exp_core1 = K2A.ar(Select.kr(range1,[tune1, tune1*0.001])) * (2.0 ** (cv_sum1 * 10.0));
             freq1 = (exp_core1 + (lin_fm1 * 2000.0)).max(0.0);
             
             ph1 = Phasor.ar(0, freq1 * SampleDur.ir, 0, 1);
@@ -97,8 +97,8 @@ Engine_Kayn : CroneEngine {
             exp_fm2 = fm2_in * InRange.ar(K2A.ar(fm2_mode), 0.5, 1.5);
             pwm_mod2 = fm2_in * (K2A.ar(fm2_mode) > 1.5);
             
-            cv_sum2 = (pv2 * pv2_mode) + exp_fm2;
-            exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001]) + fine2) * (2.0 ** (cv_sum2 * 10.0));
+            cv_sum2 = (fine2 * 0.1) + (pv2 * pv2_mode) + exp_fm2;
+            exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001])) * (2.0 ** (cv_sum2 * 10.0));
             freq2 = (exp_core2 + (lin_fm2 * 2000.0)).max(0.0);
             
             ph2 = Phasor.ar(0, freq2 * SampleDur.ir, 0, 1);
@@ -192,9 +192,9 @@ Engine_Kayn : CroneEngine {
             ping_env = EnvGen.ar(Env.perc(0.001, ping_dcy), ping_trig);
             exciter = Decay.ar(K2A.ar(ping_trig), 0.01) * 5.0;
             
-            f_mod = (K2A.ar(cutoff) + fine) * (2.0 ** (((fm * fm_amt) + freq_cv2) * 10.0)) * (2.0 ** (ping_env * 2.0));
+            f_mod = K2A.ar(cutoff) * (2.0 ** (((fm * fm_amt) + freq_cv2) * 10.0)) * (2.0 ** (ping_env * 2.0));
             f_mod = f_mod * Select.kr(range,[1.0, 0.01]);
-            f_mod = f_mod.clip(0.1, 20000);
+            f_mod = (f_mod + fine).clip(0.1, 20000);
             
             bp_fb = LocalIn.ar(1);
             bp_amp = Amplitude.ar(bp_fb, 0.001, 0.05);
@@ -301,7 +301,7 @@ Engine_Kayn : CroneEngine {
             tape_time = (Lag.kr(t_time, morph_lag) + (cv_d1 * 2.0)).clip(0.01, 4.0);
             tape_fb = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
             tape_wow_amt = (Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0);
-            tape_tone_freq = Select.kr(t_tone,[15000, 8000, 4000, 2000]);
+            tape_tone_freq = Select.kr(t_tone,[18000, 8000, 4000, 1500]);
 
             tape_local = LocalIn.ar(1);
             tape_in_sig = aud_in + (tape_local * tape_fb);
@@ -315,16 +315,17 @@ Engine_Kayn : CroneEngine {
             tape_out_r = DelayC.ar(tape_filt, 0.05, 0.015);
 
             // --- BLOOM REVERB ---
-            rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.01, 0.99);
-            rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.1, 0.9);
+            rev_decay = (Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.2); // >1.0 allows infinite freeze
+            rev_bloom = (Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 1.0);
             rev_damp = (Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000);
-            rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 0.15);
+            rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 0.2);
 
-            rev_in = DelayN.ar(aud_in, 0.15, rev_predelay);
-            ap1 = AllpassN.ar(rev_in, 0.05, 0.013, rev_bloom);
-            ap2 = AllpassN.ar(ap1, 0.05, 0.021, rev_bloom);
-            ap3 = AllpassN.ar(ap2, 0.05, 0.034, rev_bloom);
-            ap4 = AllpassN.ar(ap3, 0.05, 0.055, rev_bloom);
+            rev_in = DelayN.ar(aud_in, 0.2, rev_predelay);
+            
+            ap1 = AllpassN.ar(rev_in, 0.1, 0.023, rev_bloom);
+            ap2 = AllpassN.ar(ap1, 0.1, 0.031, rev_bloom);
+            ap3 = AllpassN.ar(ap2, 0.1, 0.047, rev_bloom);
+            ap4 = AllpassN.ar(ap3, 0.1, 0.073, rev_bloom);
 
             rev_local = LocalIn.ar(2);
             rev_fb_sig = ap4 + (rev_local * rev_decay);
@@ -340,7 +341,7 @@ Engine_Kayn : CroneEngine {
             rev_filt_l = LPF.ar(rev_del_l, rev_damp);
             rev_filt_r = LPF.ar(rev_del_r, rev_damp);
 
-            LocalOut.ar([rev_filt_r, rev_filt_l]);
+            LocalOut.ar([rev_filt_r, rev_filt_l]); // Cross-feedback
 
             rev_out_l = rev_filt_l;
             rev_out_r = rev_filt_r;
@@ -393,7 +394,7 @@ Engine_Kayn : CroneEngine {
             filt_sig_r = Select.ar(byp,[filt_r, sum[1]]);
             
             adc = SoundIn.ar([0, 1]) * K2A.ar(adc_mon);
-            master = [filt_sig_l, filt_sig_r] + adc;
+            master =[filt_sig_l, filt_sig_r] + adc;
             final_out = Limiter.ar(Shaper.ar(master_shaper_buf, (master * master_vol).clip(-1.0, 1.0)), -0.11.dbamp);
             
             Out.ar(out_ml, final_out[0] * In.kr(lvl_oml)); Out.ar(out_mr, final_out[1] * In.kr(lvl_omr));
@@ -405,6 +406,7 @@ Engine_Kayn : CroneEngine {
         synth_matrix_amps = Synth.new(\Kayn_MatrixAmps,[], context.xg, \addToHead);
         32.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
         
+        // DIAGNOSTIC SHIFT: ADC Out R is mapped to tx_idx=0. Osc 1 Out is mapped to tx_idx=1.
         synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+30, \out_r, bus_nodes_tx.index+31, \lvl_l, bus_levels.index+63, \lvl_r, bus_levels.index+64, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
         
         synth_mods[0] = Synth.new(\Kayn_1023,[\in_fm1, bus_nodes_rx.index+0, \in_fm2, bus_nodes_rx.index+1, \in_pv1, bus_nodes_rx.index+2, \in_pv2, bus_nodes_rx.index+3, \out_o1, bus_nodes_tx.index+0, \out_o2, bus_nodes_tx.index+1, \out_i1, bus_nodes_tx.index+2, \out_i2, bus_nodes_tx.index+3, \lvl_fm1, bus_levels.index+0, \lvl_fm2, bus_levels.index+1, \lvl_pv1, bus_levels.index+2, \lvl_pv2, bus_levels.index+3, \lvl_o1, bus_levels.index+4, \lvl_o2, bus_levels.index+5, \lvl_i1, bus_levels.index+6, \lvl_i2, bus_levels.index+7, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
