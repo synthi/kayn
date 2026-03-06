@@ -1,4 +1,6 @@
--- lib/screen_ui.lua v0.516
+-- lib/screen_ui.lua v0.518
+-- CHANGELOG v0.518:
+-- 1. FIX: Aceleración balística de encoders ahora lee dinámicamente el controlspec para aplicar util.clamp infalible.
 -- CHANGELOG v0.516:
 -- 1. FIX: Menús contextuales (Hold) para destinos CV y umbrales.
 -- 2. FIX: Space-Time Core UI dinámica (Tape/Reverb).
@@ -12,8 +14,7 @@ local MenuDef = {
     [2] = { A = { title = "STOCHASTIC NOISE", e1 = {id="m2_slow_rate", name="SLOW RT"}, e2 = {id="m2_tilt1", name="TILT 1"}, e3 = {id="m2_tilt2", name="TILT 2"}, k2 = {id="m2_type1", name="N1"}, k3 = {id="m2_type2", name="N2"} }, B = { title = "STOCHASTIC SLEW", e1 = {id="m2_slew_shape", name="SHAPE"}, e2 = {id="m2_rise", name="RISE"}, e3 = {id="m2_fall", name="FALL"}, k2 = {id="m2_cycle_mode", name="CYCLE"} }, C = { title = "STOCHASTIC S&H", e1 = {id="m2_glide", name="GLIDE"}, e2 = {id="m2_clk_rate", name="CLOCK"}, e3 = {id="m2_prob_skew", name="SKEW"}, k2 = {id="m2_clk_mode", name="SRC"} } },
     [3] = { A = { title = "SERGE VCFQ CORE", e1 = {id="m3_agc_drive", name="AGC DRV"}, e2 = {id="m3_cutoff", name="FREQ"}, e3 = {id="m3_q", name="RES"}, e4 = {id="m3_fine", name="FINE"}, k2 = {id="m3_range", name="RNG"}, k3 = {id="m3_ping", name="PING"} }, B = { title = "SERGE VCFQ MODS", e1 = {id="m3_ping_dcy", name="PING DCY"}, e2 = {id="m3_fm_amt", name="FM AMT"}, e3 = {id="m3_notch_bal", name="NOTCH"}, e4 = {id="m3_voct_amt", name="V/OCT"} } },
     [4] = { A = { title = "1005 RING MOD", e1 = {id="m4_rm_am_mix", name="RM/AM"}, e2 = {id="m4_mod_gain", name="MOD"}, e3 = {id="m4_unmod_gain", name="UNMOD"}, e4 = {id="m4_xfade", name="XFADE"}, k2 = {id="m4_state", name="ST"} }, B = { title = "1005 VCA", e1 = {id="m4_gate_thresh", name="THRESH"}, e2 = {id="m4_vca_base", name="BASE"}, e3 = {id="m4_vca_resp", name="RESP"}, k2 = {id="m4_state", name="ST"} } },
-    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },
-    [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"} } },
+    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },[6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"} } },
     [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"} } },
     [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },
     [9] = { A = { title = "SPACE-TIME CORE", e1 = {id="m9_t_drive", name="DRIVE"}, e2 = {id="m9_t_time", name="TIME"}, e3 = {id="m9_t_fb", name="FDBK"}, e4 = {id="m9_t_wow", name="WOW"}, k2 = {id="m9_mode", name="MODE"}, k3 = {id="m9_t_tone", name="TONE"} } },
@@ -203,13 +204,6 @@ function ScreenUI.draw_module_menu(G)
     end
 end
 
-function ScreenUI.draw(G)
-    if not G or not G.grid_map or not G.nodes or not G.focus then return end
-    if G.focus.state == "idle" or G.focus.state == "patching" then ScreenUI.draw_idle(G)
-    elseif G.focus.state == "in" or G.focus.state == "out" then ScreenUI.draw_node_menu(G)
-    elseif G.focus.state == "menu" then ScreenUI.draw_module_menu(G) end
-end
-
 local last_enc_time = 0
 function ScreenUI.enc(G, n, d)
     if not G or not G.focus then return end
@@ -219,7 +213,22 @@ function ScreenUI.enc(G, n, d)
     if G.focus.state == "idle" then
         local target_param = nil
         if n == 1 then target_param = "m10_master_vol" elseif n == 2 then target_param = "m10_cut_l" elseif n == 3 then target_param = "m10_cut_r" end
-        if target_param then register_touch(G, target_param); pcall(function() if n == 1 then params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) else params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 100.0 or 10.0))), 20.0, 18000.0)) end end) end
+        if target_param then 
+            register_touch(G, target_param); 
+            pcall(function() 
+                local p_idx = params.lookup[target_param]
+                local min_val = 20.0; local max_val = 18000.0
+                if p_idx and params.params[p_idx].controlspec then
+                    min_val = params.params[p_idx].controlspec.minval
+                    max_val = params.params[p_idx].controlspec.maxval
+                end
+                if n == 1 then 
+                    params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) 
+                else 
+                    params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 100.0 or 10.0))), min_val, max_val)) 
+                end 
+            end) 
+        end
     elseif G.focus.state == "in" or G.focus.state == "out" then
         if not G.focus.node_x or not G.focus.node_y then return end
         local node = G.grid_map[G.focus.node_x] and G.grid_map[G.focus.node_x][G.focus.node_y]
@@ -252,9 +261,19 @@ function ScreenUI.enc(G, n, d)
         if target_param then
             register_touch(G, target_param)
             pcall(function()
-                if string.find(target_param, "tune") or string.find(target_param, "cutoff") or string.find(target_param, "damp") then params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 10.0 or 1.0))), 0.01, 18000.0))
-                elseif string.find(target_param, "fine") then params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.001 or 0.01)), -5.0, 5.0))
-                else params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) end
+                local p_idx = params.lookup[target_param]
+                local min_val = 0; local max_val = 1
+                if p_idx and params.params[p_idx].controlspec then
+                    min_val = params.params[p_idx].controlspec.minval
+                    max_val = params.params[p_idx].controlspec.maxval
+                end
+                if string.find(target_param, "tune") or string.find(target_param, "cutoff") or string.find(target_param, "damp") then 
+                    params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.1 or ((accel > 1) and 10.0 or 1.0))), min_val, max_val))
+                elseif string.find(target_param, "fine") then 
+                    params:set(target_param, util.clamp(params:get(target_param) + (d * ((accel < 1) and 0.001 or 0.01)), min_val, max_val))
+                else 
+                    params:delta(target_param, d * ((accel < 1) and 0.1 or 1.0)) 
+                end
             end)
         end
     end
