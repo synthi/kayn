@@ -1,7 +1,6 @@
--- lib/params_setup.lua v0.530
--- CHANGELOG v0.530:
--- 1. FIX: Módulo 9 purificado a Bloom Reverb.
--- 2. FIX: Tape Echo reintegrado al Nexus (Módulo 10).
+-- lib/params_setup.lua v0.531
+-- CHANGELOG v0.531:
+-- 1. FIX: Conteo del grupo MOD 10: NEXUS corregido a 28 para evitar errores de anidación en la UI de Norns.
 
 local Params = {}
 
@@ -100,7 +99,7 @@ function Params.init(G)
         add_node_params(37 + ((i-1)*4), 40 + ((i-1)*4))
     end
 
-    params:add_group("MOD 9: BLOOM REVERB", 10)
+    params:add_group("MOD 9: BLOOM REVERB", 9)
     params:add{type = "option", id = "m9_cv_dest", name = "CV Dest", options = {"DECAY", "BLOOM", "DAMP", "PREDLY"}, default = 1, action = function(x) if not G.booting then engine.m9_cv_dest(x - 1) end end}
     params:add{type = "control", id = "m9_r_decay", name = "Rev Decay", controlspec = controlspec.new(0.0, 1.1, 'lin', 0.01, 0.9), action = function(x) if not G.booting then engine.m9_r_decay(x) end end}
     params:add{type = "control", id = "m9_r_bloom", name = "Rev Bloom", controlspec = controlspec.new(0.01, 2.0, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_bloom(x) end end}
@@ -109,7 +108,7 @@ function Params.init(G)
     params:add{type = "option", id = "m9_r_mod", name = "Rev Mod", options = {"OFF", "LIGHT", "DEEP", "CHAOS"}, default = 1, action = function(x) if not G.booting then engine.m9_r_mod(x - 1) end end}
     add_node_params(53, 56)
 
-    params:add_group("MOD 10: NEXUS", 27)
+    params:add_group("MOD 10: NEXUS", 28)
     params:add{type = "control", id = "m10_master_vol", name = "Master Volume", controlspec = controlspec.new(-60.0, 12.0, 'lin', 0.5, 0.0, "dB"), action = function(x) if not G.booting then engine.m10_master_vol(math.pow(10, x / 20)) end end}
     params:add{type = "control", id = "m10_cut_l", name = "Master Cutoff L", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_l(x) end end}
     params:add{type = "control", id = "m10_cut_r", name = "Master Cutoff R", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_r(x) end end}
