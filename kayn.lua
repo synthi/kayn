@@ -1,6 +1,6 @@
--- kayn.lua v0.530
--- CHANGELOG v0.530:
--- 1. FIX: Ajuste de bucles a 66 nodos y mapeo de índices TX/RX para la DMZ 37x37.
+-- kayn.lua v0.531
+-- CHANGELOG v0.531:
+-- 1. FIX FATAL: Corregido el offset de lectura OSC para los vúmetros de la DMZ 36x36.
 
 engine.name = 'Kayn'
 
@@ -29,9 +29,9 @@ osc.event = function(path, args, from)
             local node = G.nodes[i]
             if node then
                 if node.type == "out" then
-                    G.node_levels[i] = args[2 + node.tx_idx] or 0
+                    G.node_levels[i] = args[node.tx_idx] or 0
                 elseif node.type == "in" then
-                    G.node_levels[i] = args[2 + 37 + node.rx_idx] or 0
+                    G.node_levels[i] = args[36 + node.rx_idx] or 0
                 end
             end
         end
