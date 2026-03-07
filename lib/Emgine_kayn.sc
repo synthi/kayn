@@ -1,4 +1,5 @@
-// lib/Engine_Kayn.sc v0.531
+// lib/Engine_Kayn.sc v0.535
+// v535: refactor bloom reverb.
 // CHANGELOG v0.531:
 // 1. FIX FATAL: Topología ajustada a 36 buses exactos (34 reales + 2 dummies).
 // 2. FIX FATAL: DSP de la Bloom Reverb restaurado al diseño aprobado por el comité (Suma lineal, LeakDC y tanh al final).
@@ -274,16 +275,23 @@ Engine_Kayn : CroneEngine {
             Out.ar(out_env, env_out * In.kr(lvl_oenv));
         }).add;
 
-        SynthDef(\Kayn_SpaceTime, {
+        SynthDef(\Kayn_BloomReverb, {
             arg in_aud, in_cv, out_l, out_r, lvl_aud, lvl_cv, lvl_ol, lvl_or,
-                cv_dest=0, r_decay=0.5, r_bloom=0.5, r_damp=10000, r_predelay=0.0, r_mod=0,
+                cv_dest=0, r_decay=0.9, r_bloom=0.5, r_damp=10000, r_predelay=0.0, r_mod=0,
                 phys_bus, shaper_buf;
 
             var morph_lag = In.kr(phys_bus + 7);
             var aud_in, cv_in, cv_d0, cv_d1, cv_d2, cv_d3;
-            var rev_local, rev_fb_out;
-            var rev_decay_time, rev_bloom_k, rev_damp_k, rev_predelay, rev_in;
-            var mod_rate, mod_depth, lfo_l, lfo_r, rev_tank, rev_tank_l, rev_tank_r, rev_out_l, rev_out_r;
+            var rev_decay_time, rev_bloom_k, rev_damp_k, rev_predelay_k, rev_in;
+            var mod_rate, mod_depth, combs_l, combs_r, cross_l, cross_r, ap_l, ap_r, rev_filt_l, rev_filt_r, rev_out_l, rev_out_r;
+            var lfo_l, lfo_r;
+            
+            // Magic Numbers (Mutually Prime Samples at 48kHz converted to Seconds)
+            // Erradica matemáticamente la resonancia estática en F4/F5
+            var prime_combs_l =[0.031229, 0.037270, 0.043979, 0.050354, 0.057270, 0.064770];
+            var prime_combs_r =[0.031479, 0.037729, 0.044354, 0.050479, 0.057354, 0.064979];
+            var prime_ap_l =[0.011270, 0.031729];
+            var prime_ap_r =[0.011604, 0.031895];
 
             aud_in = InFeedback.ar(in_aud) * In.kr(lvl_aud);
             cv_in = Lag.ar(InFeedback.ar(in_cv) * In.kr(lvl_cv), 0.0001);
@@ -293,47 +301,51 @@ Engine_Kayn : CroneEngine {
             cv_d2 = cv_in * InRange.ar(K2A.ar(cv_dest), 1.5, 2.5);
             cv_d3 = cv_in * (K2A.ar(cv_dest) > 2.5);
 
-            rev_local = LocalIn.ar(2);
-
-            // ==========================================
-            // --- BLOOM REVERB ---
-            // ==========================================
-            rev_decay_time = A2K.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1)); 
+            // r_decay maps to 0.1s -> 100s (Infinite Freeze)
+            rev_decay_time = LinExp.kr(A2K.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1)), 0.0, 1.1, 0.1, 100.0); 
             rev_bloom_k = A2K.kr((Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0));
             rev_damp_k = A2K.kr((Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000));
-            rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 1.0);
+            rev_predelay_k = A2K.kr((Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 1.0));
 
-            // Input diffusion & DC Block
-            rev_in = LeakDC.ar(DelayN.ar(aud_in ! 2, 1.0, rev_predelay));
-            rev_in = AllpassN.ar(rev_in, 0.05, 0.017, 0.5);
-            rev_in = AllpassN.ar(rev_in, 0.05, 0.023, 0.5);
+            // 1. Pre-Delay (Max 1.0s)
+            rev_in = DelayN.ar(aud_in ! 2, 1.0, rev_predelay_k);
 
-            // Tank Summation (Linear, no compression here)
-            rev_tank = rev_in + (rev_local * rev_decay_time);
-
+            // 2. Modulation LFOs (Descorrelación Áurea)
+            // El factor 1.1618 garantiza que los ciclos L y R jamás se sincronicen
             mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
             mod_depth = Select.kr(r_mod,[0.0, 0.0005, 0.0015, 0.003]);
             lfo_l = LFNoise2.kr(mod_rate) * mod_depth;
-            lfo_r = LFNoise2.kr(mod_rate * 1.1) * mod_depth;
+            lfo_r = LFNoise2.kr(mod_rate * 1.1618) * mod_depth;
 
-            // Tank Diffusion (AllpassC is MANDATORY for modulated delay times to prevent NaN/Clicks)
-            rev_tank_l = AllpassC.ar(rev_tank[0], 0.1, 0.031 + lfo_l, rev_bloom_k);
-            rev_tank_l = AllpassC.ar(rev_tank_l, 0.1, 0.047, rev_bloom_k);
+            // 3. Parallel Comb Filters (The Tank) using Cubic Interpolation and Prime Numbers
+            combs_l = prime_combs_l.collect { |time| 
+                CombC.ar(rev_in[0], 0.1, time + lfo_l, rev_decay_time) 
+            }.sum;
             
-            rev_tank_r = AllpassC.ar(rev_tank[1], 0.1, 0.037 + lfo_r, rev_bloom_k);
-            rev_tank_r = AllpassC.ar(rev_tank_r, 0.1, 0.053, rev_bloom_k);
+            combs_r = prime_combs_r.collect { |time| 
+                CombC.ar(rev_in[1], 0.1, time + lfo_r, rev_decay_time) 
+            }.sum;
 
-            // Damping & Saturation at the END of the chain (Prevents infinite integration blowup)
-            rev_tank_l = LeakDC.ar(LPF.ar(rev_tank_l, rev_damp_k)).tanh;
-            rev_tank_r = LeakDC.ar(LPF.ar(rev_tank_r, rev_damp_k)).tanh;
+            // 3.5 Cross-Pollination (Inyección Estéreo Cruzada)
+            // Fusiona un 20% de la energía del tanque opuesto para crear una imagen 3D cohesiva
+            cross_l = combs_l + (combs_r * 0.2);
+            cross_r = combs_r + (combs_l * 0.2);
 
-            // Cross-feedback
-            rev_fb_out = [rev_tank_r, rev_tank_l];
-            
-            rev_out_l = rev_tank_l;
-            rev_out_r = rev_tank_r;
+            // 4. Series Allpass Filters (Diffusion / Bloom) - CPU Optimized (AllpassN)
+            ap_l = cross_l; ap_r = cross_r;
+            2.do { |i|
+                ap_l = AllpassN.ar(ap_l, 0.05, prime_ap_l[i], rev_bloom_k * 2.0); 
+                ap_r = AllpassN.ar(ap_r, 0.05, prime_ap_r[i], rev_bloom_k * 2.0); 
+            };
 
-            LocalOut.ar(rev_fb_out);
+            // 5. Post-Damping (Simulates air absorption over time)
+            rev_filt_l = LPF.ar(ap_l, rev_damp_k);
+            rev_filt_r = LPF.ar(ap_r, rev_damp_k);
+
+            // 6. DC Blocking & Transparent Saturation (Safety net for 100s Freeze)
+            // El multiplicador * 0.3 actúa como un pad de headroom para evitar el "crunch" en los transitorios
+            rev_out_l = (LeakDC.ar(rev_filt_l) * 0.3).tanh;
+            rev_out_r = (LeakDC.ar(rev_filt_r) * 0.3).tanh;
 
             Out.ar(out_l, Shaper.ar(shaper_buf, rev_out_l.clip(-1.0, 1.0)) * In.kr(lvl_ol));
             Out.ar(out_r, Shaper.ar(shaper_buf, rev_out_r.clip(-1.0, 1.0)) * In.kr(lvl_or));
