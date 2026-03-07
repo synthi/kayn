@@ -1,6 +1,7 @@
--- lib/storage.lua v0.530
--- CHANGELOG v0.530:
--- 1. FIX: Ajuste de bucles a 66 nodos y 37 buses TX/RX para la DMZ.
+-- lib/storage.lua v0.531
+-- CHANGELOG v0.531:
+-- 1. FIX FATAL: Restaurado el (- 1) en pause/resume_matrix_row para sincronizar con la API de SC.
+-- 2. FIX FATAL: Array row_vals inicializado a 36 para coincidir con la DMZ 36x36.
 
 local Storage = {}
 local Matrix = include('lib/matrix')
@@ -50,7 +51,7 @@ function Storage.load(G, pset_number)
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 37 do row_vals[i] = 0.0 end
+                            for i = 1, 36 do row_vals[i] = 0.0 end
                             
                             for src_id = 1, 66 do
                                 local src_node = G.nodes[src_id]
@@ -63,7 +64,7 @@ function Storage.load(G, pset_number)
                                 end
                             end
                             engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                            if has_active then engine.resume_matrix_row(dst_node.rx_idx) else engine.pause_matrix_row(dst_node.rx_idx) end
+                            if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
                             clock.sleep(0.002)
                         end
                     end
@@ -111,7 +112,7 @@ function Storage.load_snapshot(G, snap_id)
             local dst_node = G.nodes[dst_id]
             if dst_node and dst_node.type == "in" then
                 local has_active = false; local row_vals = {}
-                for i = 1, 37 do row_vals[i] = 0.0 end
+                for i = 1, 36 do row_vals[i] = 0.0 end
                 
                 for src_id = 1, 66 do
                     local src_node = G.nodes[src_id]
@@ -125,7 +126,7 @@ function Storage.load_snapshot(G, snap_id)
                     end
                 end
                 engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                if has_active then engine.resume_matrix_row(dst_node.rx_idx) else engine.pause_matrix_row(dst_node.rx_idx) end
+                if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
             end
         end
         G.screen_dirty = true
@@ -149,7 +150,7 @@ function Storage.load_snapshot(G, snap_id)
             if dst_node and dst_node.type == "in" then
                 local needs_row = false
                 for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
-                if needs_row then engine.resume_matrix_row(dst_node.rx_idx) end
+                if needs_row then engine.resume_matrix_row(dst_node.rx_idx - 1) end
             end
         end
         pcall(function() engine.set_morph_lag(0.1) end)
@@ -164,7 +165,7 @@ function Storage.load_snapshot(G, snap_id)
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 37 do row_vals[i] = 0.0 end
+                            for i = 1, 36 do row_vals[i] = 0.0 end
                             
                             for src_id = 1, 66 do
                                 local src_node = G.nodes[src_id]
@@ -178,7 +179,7 @@ function Storage.load_snapshot(G, snap_id)
                                 end
                             end
                             engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                            if not has_active then engine.pause_matrix_row(dst_node.rx_idx) end
+                            if not has_active then engine.pause_matrix_row(dst_node.rx_idx - 1) end
                         end
                     end
                     pcall(function() engine.set_morph_lag(0.05) end) 
@@ -209,7 +210,7 @@ function Storage.load_snapshot(G, snap_id)
                     local dst_node = G.nodes[dst_id]
                     if dst_node and dst_node.type == "in" then
                         local row_changed = false; local row_vals = {}
-                        for i = 1, 37 do row_vals[i] = 0.0 end
+                        for i = 1, 36 do row_vals[i] = 0.0 end
                         
                         for src_id = 1, 66 do
                             local src_node = G.nodes[src_id]
