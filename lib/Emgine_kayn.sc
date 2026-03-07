@@ -1,9 +1,8 @@
-// lib/Engine_Kayn.sc v0.524
+// lib/Engine_Kayn.sc v0.525
+// CHANGELOG v0.525:
+// 1. FIX FATAL: Corregido Rate Mismatch en Lag3.kr del Tape Echo. Se aplicó A2K.kr a cv_d1.
 // CHANGELOG v0.524:
 // 1. DSP: Tape Echo clonado exactamente de Elianne_Nexus (Lag3, Saturación con Delay1, Filtro dinámico).
-// 2. DSP: Reverb Bloom refinada con matrices de números primos para erradicar resonancia F4/F5. Predelay max 1.0s.
-// 3. DSP: VCO 2 fm2_mode corregido para rutear a Morph en lugar de PWM.
-// 4. DSP: Stochastic Slew Shape implementado mediante feedback de estado. Añadido Slow Noise (LFNoise2).
 
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
@@ -337,8 +336,8 @@ Engine_Kayn : CroneEngine {
             // ==========================================
             // --- TAPE ECHO (Elianne Clone) ---
             // ==========================================
-            // FIX: Lag3.kr fijo en 0.5s para inercia física, ignorando morph_lag
-            tape_time_lag = Lag3.kr((t_time + (cv_d1 * 2.0)).clip(0.01, 6.0), 0.5); 
+            // FIX: Lag3.kr fijo en 0.5s para inercia física. A2K.kr en cv_d1 para evitar Rate Mismatch.
+            tape_time_lag = Lag3.kr((t_time + (A2K.kr(cv_d1) * 2.0)).clip(0.01, 6.0), 0.5); 
             tape_fb_amt = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
             tape_wow_amt_k = A2K.kr((Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0));
             tape_tone_freq = Select.kr(t_tone,[18000, 8000, 4000, 1500]);
