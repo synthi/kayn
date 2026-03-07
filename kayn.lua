@@ -1,5 +1,5 @@
--- kayn.lua v0.531
--- CHANGELOG v0.531:
+-- kayn.lua v0.537
+-- CHANGELOG v0.537 fix lua sync
 -- 1. FIX FATAL: Corregido el offset de lectura OSC para los vúmetros de la DMZ 36x36.
 
 engine.name = 'Kayn'
@@ -160,9 +160,10 @@ function init()
         G.fader_last_raw[slider_id] = raw_val
     end)
     
+    -- FIX v0.537: Desbloquear el sistema ANTES del bang para permitir la sincronización OSC del PSET
+    G.booting = false
     params:bang()
     pcall(function() engine.set_morph_lag(0.05) end)
-    G.booting = false
     print("KAYN DEBUG: BOOT COMPLETADO")
 end
 
