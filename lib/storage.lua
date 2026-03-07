@@ -1,9 +1,6 @@
--- lib/storage.lua v0.518
--- CHANGELOG v0.518:
--- 1. FIX: Arrays de ruteo expandidos a 34 para la DMZ.
--- 2. FIX: Clamping asintótico (math.max) en la interpolación exponencial para evitar NaN.
--- CHANGELOG v0.516:
--- 1. FIX: Ajuste de bucles a 64 nodos y 32 buses TX/RX.
+-- lib/storage.lua v0.530
+-- CHANGELOG v0.530:
+-- 1. FIX: Ajuste de bucles a 66 nodos y 37 buses TX/RX para la DMZ.
 
 local Storage = {}
 local Matrix = include('lib/matrix')
@@ -35,9 +32,9 @@ function Storage.load(G, pset_number)
             for i = 1, 16 do G.fader_latched[i] = false end
             
             if data.patch then
-                for src_id = 1, 64 do
+                for src_id = 1, 66 do
                     if data.patch[src_id] then
-                        for dst_id = 1, 64 do
+                        for dst_id = 1, 66 do
                             if data.patch[src_id][dst_id] then
                                 G.patch[src_id][dst_id].active = data.patch[src_id][dst_id].active
                                 G.patch[src_id][dst_id].current_gain = data.patch[src_id][dst_id].current_gain
@@ -49,13 +46,13 @@ function Storage.load(G, pset_number)
                 end
                 
                 clock.run(function()
-                    for dst_id = 1, 64 do
+                    for dst_id = 1, 66 do
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 34 do row_vals[i] = 0.0 end
+                            for i = 1, 37 do row_vals[i] = 0.0 end
                             
-                            for src_id = 1, 64 do
+                            for src_id = 1, 66 do
                                 local src_node = G.nodes[src_id]
                                 if src_node and src_node.type == "out" then
                                     local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
@@ -66,11 +63,11 @@ function Storage.load(G, pset_number)
                                 end
                             end
                             engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                            if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
+                            if has_active then engine.resume_matrix_row(dst_node.rx_idx) else engine.pause_matrix_row(dst_node.rx_idx) end
                             clock.sleep(0.002)
                         end
                     end
-                    for i = 1, 64 do
+                    for i = 1, 66 do
                         local node = G.nodes[i]
                         if node then
                             node.level = params:get("node_lvl_" .. i) or 0.0
@@ -110,13 +107,13 @@ function Storage.load_snapshot(G, snap_id)
     
     if morph_time <= 0.05 then
         for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
-        for dst_id = 1, 64 do
+        for dst_id = 1, 66 do
             local dst_node = G.nodes[dst_id]
             if dst_node and dst_node.type == "in" then
                 local has_active = false; local row_vals = {}
-                for i = 1, 34 do row_vals[i] = 0.0 end
+                for i = 1, 37 do row_vals[i] = 0.0 end
                 
-                for src_id = 1, 64 do
+                for src_id = 1, 66 do
                     local src_node = G.nodes[src_id]
                     if src_node and src_node.type == "out" then
                         local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
@@ -128,7 +125,7 @@ function Storage.load_snapshot(G, snap_id)
                     end
                 end
                 engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
+                if has_active then engine.resume_matrix_row(dst_node.rx_idx) else engine.pause_matrix_row(dst_node.rx_idx) end
             end
         end
         G.screen_dirty = true
@@ -136,9 +133,9 @@ function Storage.load_snapshot(G, snap_id)
         local start_params = {}
         for p_id, _ in pairs(target.params) do if params.lookup[p_id] then start_params[p_id] = params:get(p_id) end end
         local start_patch = {}
-        for src_id = 1, 64 do
+        for src_id = 1, 66 do
             start_patch[src_id] = {}
-            for dst_id = 1, 64 do
+            for dst_id = 1, 66 do
                 local current = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].current_gain or 0.0
                 start_patch[src_id][dst_id] = current
                 if target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active then 
@@ -147,12 +144,12 @@ function Storage.load_snapshot(G, snap_id)
             end
         end
         local start_time = util.time()
-        for dst_id = 1, 64 do
+        for dst_id = 1, 66 do
             local dst_node = G.nodes[dst_id]
             if dst_node and dst_node.type == "in" then
                 local needs_row = false
-                for src_id = 1, 64 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
-                if needs_row then engine.resume_matrix_row(dst_node.rx_idx - 1) end
+                for src_id = 1, 66 do if start_patch[src_id][dst_id] > 0 or (target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active) then needs_row = true end end
+                if needs_row then engine.resume_matrix_row(dst_node.rx_idx) end
             end
         end
         pcall(function() engine.set_morph_lag(0.1) end)
@@ -163,13 +160,13 @@ function Storage.load_snapshot(G, snap_id)
                 G.morph_percent = progress * 100 
                 if progress >= 1.0 then
                     for p_id, val in pairs(target.params) do if params.lookup[p_id] then params:set(p_id, val) end end
-                    for dst_id = 1, 64 do
+                    for dst_id = 1, 66 do
                         local dst_node = G.nodes[dst_id]
                         if dst_node and dst_node.type == "in" then
                             local has_active = false; local row_vals = {}
-                            for i = 1, 34 do row_vals[i] = 0.0 end
+                            for i = 1, 37 do row_vals[i] = 0.0 end
                             
-                            for src_id = 1, 64 do
+                            for src_id = 1, 66 do
                                 local src_node = G.nodes[src_id]
                                 if src_node and src_node.type == "out" then
                                     local is_active = target.patch[src_id] and target.patch[src_id][dst_id] and target.patch[src_id][dst_id].active or false
@@ -181,7 +178,7 @@ function Storage.load_snapshot(G, snap_id)
                                 end
                             end
                             engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                            if not has_active then engine.pause_matrix_row(dst_node.rx_idx - 1) end
+                            if not has_active then engine.pause_matrix_row(dst_node.rx_idx) end
                         end
                     end
                     pcall(function() engine.set_morph_lag(0.05) end) 
@@ -208,13 +205,13 @@ function Storage.load_snapshot(G, snap_id)
                         end
                     end
                 end
-                for dst_id = 1, 64 do
+                for dst_id = 1, 66 do
                     local dst_node = G.nodes[dst_id]
                     if dst_node and dst_node.type == "in" then
                         local row_changed = false; local row_vals = {}
-                        for i = 1, 34 do row_vals[i] = 0.0 end
+                        for i = 1, 37 do row_vals[i] = 0.0 end
                         
-                        for src_id = 1, 64 do
+                        for src_id = 1, 66 do
                             local src_node = G.nodes[src_id]
                             if src_node and src_node.type == "out" then
                                 local start_val = start_patch[src_id][dst_id]
