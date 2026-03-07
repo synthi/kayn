@@ -1,5 +1,5 @@
-// lib/Engine_Kayn.sc v0.536
-// v536: fixes, 535:refactor bloom reverb.
+// lib/Engine_Kayn.sc v0.537
+// v537: half wave r3ctifier, fixes, 535:refactor bloom reverb.
 // CHANGELOG v0.531:
 // 1. FIX FATAL: Topología ajustada a 36 buses exactos (34 reales + 2 dummies).
 // 2. FIX FATAL: DSP de la Bloom Reverb restaurado al diseño aprobado por el comité (Suma lineal, LeakDC y tanh al final).
@@ -269,7 +269,8 @@ Engine_Kayn : CroneEngine {
             aud_out = aud_in * vca_final;
             
             env_src = Select.ar(K2A.ar(env_src_sel),[aud_in, aud_out]);
-            env_out = (LagUD.ar(env_src.abs, 0.001, env_slew) * env_gain * 2.0).clip(0.0, 2.0);
+            // Half-Wave Rectification (.max(0)) preserves the "off" phase of bipolar LFOs
+            env_out = (LagUD.ar(env_src.max(0), 0.001, env_slew) * env_gain * 2.0).clip(0.0, 2.0);
             
             Out.ar(out_aud, Shaper.ar(shaper_buf, aud_out.clip(-1.0, 1.0)) * In.kr(lvl_oaud));
             Out.ar(out_env, env_out * In.kr(lvl_oenv));
