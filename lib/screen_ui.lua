@@ -1,5 +1,5 @@
--- lib/screen_ui.lua v0.531
--- CHANGELOG v0.531:
+-- lib/screen_ui.lua v0.536
+-- CHANGELOG v0.536: fixes, t31:
 -- 1. FIX: Eliminada la lógica dinámica del Módulo 9 (ahora es solo Reverb).
 -- 2. FIX: Traducción de strings para los destinos CV en el menú Hold.
 
