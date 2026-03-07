@@ -1,5 +1,5 @@
-// lib/Engine_Kayn.sc v0.535
-// v535: refactor bloom reverb.
+// lib/Engine_Kayn.sc v0.536
+// v536: fixes, 535:refactor bloom reverb.
 // CHANGELOG v0.531:
 // 1. FIX FATAL: Topología ajustada a 36 buses exactos (34 reales + 2 dummies).
 // 2. FIX FATAL: DSP de la Bloom Reverb restaurado al diseño aprobado por el comité (Suma lineal, LeakDC y tanh al final).
@@ -82,11 +82,11 @@ Engine_Kayn : CroneEngine {
             freq1 = (exp_core1 + (lin_fm1 * 2000.0)).max(0.0);
             
             ph1 = Phasor.ar(0, freq1 * SampleDur.ir, 0, 1);
-            tri1 = LeakDC.ar((ph1 * 2 - 1).abs * 2 - 1);
+            tri1 = (ph1 * 2 - 1).abs * 2 - 1;
             sqr1 = (ph1 > 0.5) * 2 - 1;
             saw1 = (ph1 * 2 - 1) + (HPF.ar(Impulse.ar(freq1), 10000) * 0.1);
             pul1 = (tri1 > (((pwm1 + (pv1 * (1 - pv1_mode))).clip(0.0, 1.0) * 2) - 1)) * 2 - 1;
-            sin1 = (LeakDC.ar(tri1 - (tri1.pow(3) / 6.0)) + (sqr1 * 0.02)) * 1.2;
+            sin1 = (tri1 - (tri1.pow(3) / 6.0) + (sqr1 * 0.02)) * 1.2;
             mix1 = SelectX.ar((morph1 + (morph_mod1 * 5.0)).clip(0,1) * 9.0,[sin1, tri1, saw1, sqr1, pul1, sin1.neg, tri1, saw1.neg, sqr1, pul1.neg]);
             sig_out3 = Select.ar(out3_wave,[sin1, tri1, saw1, sqr1, pul1]);
             
@@ -102,11 +102,11 @@ Engine_Kayn : CroneEngine {
             freq2 = (exp_core2 + (lin_fm2 * 2000.0)).max(0.0);
             
             ph2 = Phasor.ar(0, freq2 * SampleDur.ir, 0, 1);
-            tri2 = LeakDC.ar((ph2 * 2 - 1).abs * 2 - 1);
+            tri2 = (ph2 * 2 - 1).abs * 2 - 1;
             sqr2 = (ph2 > 0.5) * 2 - 1;
             saw2 = (ph2 * 2 - 1) + (HPF.ar(Impulse.ar(freq2), 10000) * 0.1);
             pul2 = (tri2 > (((pwm2 + (pv2 * (1 - pv2_mode)) + pwm_mod2).clip(0.0, 1.0) * 2) - 1)) * 2 - 1;
-            sin2 = (LeakDC.ar(tri2 - (tri2.pow(3) / 6.0)) + (sqr2 * 0.02)) * 1.2;
+            sin2 = (tri2 - (tri2.pow(3) / 6.0) + (sqr2 * 0.02)) * 1.2;
             mix2 = SelectX.ar((morph2 + (fm2_in * fm2_mode * 5.0)).clip(0,1) * 9.0,[sin2, tri2, saw2, sqr2, pul2, sin2.neg, tri2, saw2.neg, sqr2, pul2.neg]);
             sig_out4 = Select.ar(out4_wave,[sin2, tri2, saw2, sqr2, pul2]);
             
@@ -269,7 +269,7 @@ Engine_Kayn : CroneEngine {
             aud_out = aud_in * vca_final;
             
             env_src = Select.ar(K2A.ar(env_src_sel),[aud_in, aud_out]);
-            env_out = (Amplitude.ar(env_src, 0.001, env_slew) * env_gain * 2.0).clip(0.0, 2.0);
+            env_out = (LagUD.ar(env_src.abs, 0.001, env_slew) * env_gain * 2.0).clip(0.0, 2.0);
             
             Out.ar(out_aud, Shaper.ar(shaper_buf, aud_out.clip(-1.0, 1.0)) * In.kr(lvl_oaud));
             Out.ar(out_env, env_out * In.kr(lvl_oenv));
@@ -356,7 +356,7 @@ Engine_Kayn : CroneEngine {
                 lvl_ml, lvl_mr, lvl_al, lvl_ar, pan_ml, pan_mr, pan_al, pan_ar, lvl_oml, lvl_omr, lvl_otl, lvl_otr,
                 cut_l=18000, cut_r=18000, res_l=0, res_r=0, filt_byp=0,
                 master_vol=1.0, drive=1.0, adc_mon=0, cv_dest_l=0, cv_dest_r=0,
-                tape_time=0.3, tape_fb=0.4, tape_wow=0.0, tape_tone=0, tape_mute=0,
+                tape_time=0.3, tape_fb=0.4, tape_wow=0.0, tape_tone=0, tape_mute=0, tape_mix=0.2,
                 phys_bus, shaper_buf, master_shaper_buf;
                 
             var morph_lag = In.kr(phys_bus + 7);
@@ -368,7 +368,7 @@ Engine_Kayn : CroneEngine {
             cut_l = Lag.kr(cut_l, morph_lag); cut_r = Lag.kr(cut_r, morph_lag); 
             res_l = Lag.kr(res_l, morph_lag); res_r = Lag.kr(res_r, morph_lag);
             drive = Lag.kr(drive, morph_lag); master_vol = Lag.kr(master_vol, morph_lag);
-            tape_time = Lag.kr(tape_time, morph_lag); tape_fb = Lag.kr(tape_fb, morph_lag); tape_wow = Lag.kr(tape_wow, morph_lag);
+            tape_time = Lag.kr(tape_time, morph_lag); tape_fb = Lag.kr(tape_fb, morph_lag); tape_wow = Lag.kr(tape_wow, morph_lag); tape_mix = Lag.kr(tape_mix, morph_lag);
             
             cv_l = InFeedback.ar(in_al) * In.kr(lvl_al);
             cv_r = InFeedback.ar(in_ar) * In.kr(lvl_ar);
@@ -425,7 +425,7 @@ Engine_Kayn : CroneEngine {
             
             // --- MASTER ---
             adc = SoundIn.ar([0, 1]) * K2A.ar(adc_mon);
-            master = filt_sig + (tape_out * (1.0 - tape_mute)) + adc;
+            master = filt_sig + (tape_out * tape_mix * (1.0 - tape_mute)) + adc;
             final_out = Limiter.ar(Shaper.ar(master_shaper_buf, (master * master_vol).clip(-1.0, 1.0)), -0.11.dbamp);
             
             Out.ar(out_ml, final_out[0] * In.kr(lvl_oml)); Out.ar(out_mr, final_out[1] * In.kr(lvl_omr));
@@ -506,8 +506,9 @@ Engine_Kayn : CroneEngine {
 
         // M10: NEXUS
         this.addCommand("m10_cut_l", "f", { |msg| synth_mods[9].set(\cut_l, msg[1]) }); this.addCommand("m10_cut_r", "f", { |msg| synth_mods[9].set(\cut_r, msg[1]) }); this.addCommand("m10_res_l", "f", { |msg| synth_mods[9].set(\res_l, msg[1]) }); this.addCommand("m10_res_r", "f", { |msg| synth_mods[9].set(\res_r, msg[1]) }); this.addCommand("m10_drive", "f", { |msg| synth_mods[9].set(\drive, msg[1]) }); this.addCommand("m10_filt_byp", "i", { |msg| synth_mods[9].set(\filt_byp, msg[1]) }); this.addCommand("m10_adc_mon", "i", { |msg| synth_mods[9].set(\adc_mon, msg[1]) }); this.addCommand("m10_master_vol", "f", { |msg| synth_mods[9].set(\master_vol, msg[1]) }); this.addCommand("m10_cv_dest_l", "i", { |msg| synth_mods[9].set(\cv_dest_l, msg[1]) }); this.addCommand("m10_cv_dest_r", "i", { |msg| synth_mods[9].set(\cv_dest_r, msg[1]) });
-        this.addCommand("m10_tape_time", "f", { |msg| synth_mods[9].set(\tape_time, msg[1]) }); this.addCommand("m10_tape_fb", "f", { |msg| synth_mods[9].set(\tape_fb, msg[1]) }); this.addCommand("m10_tape_wow", "f", { |msg| synth_mods[9].set(\tape_wow, msg[1]) }); this.addCommand("m10_tape_tone", "i", { |msg| synth_mods[9].set(\tape_tone, msg[1]) }); this.addCommand("m10_tape_mute", "i", { |msg| synth_mods[9].set(\tape_mute, msg[1]) });
+        this.addCommand("m10_tape_time", "f", { |msg| synth_mods[9].set(\tape_time, msg[1]) }); this.addCommand("m10_tape_fb", "f", { |msg| synth_mods[9].set(\tape_fb, msg[1]) }); this.addCommand("m10_tape_wow", "f", { |msg| synth_mods[9].set(\tape_wow, msg[1]) }); this.addCommand("m10_tape_tone", "i", { |msg| synth_mods[9].set(\tape_tone, msg[1]) }); this.addCommand("m10_tape_mute", "i", { |msg| synth_mods[9].set(\tape_mute, msg[1]) }); this.addCommand("m10_tape_mix", "f", { |msg| synth_mods[9].set(\tape_mix, msg[1]) });
     }
+
 
     free {
         synth_matrix_amps.free; synth_matrix_rows.do({ |s| if(s.notNil, { s.free }) }); synth_mods.do({ |s| if(s.notNil, { s.free }) }); synth_adc.free;
