@@ -1,5 +1,5 @@
--- lib/params_setup.lua v0.531
--- CHANGELOG v0.531:
+-- lib/params_setup.lua v0.536
+-- CHANGELOG v0.536: fixes, 531:
 -- 1. FIX: Conteo del grupo MOD 10: NEXUS corregido a 28 para evitar errores de anidación en la UI de Norns.
 
 local Params = {}
