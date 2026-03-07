@@ -14,8 +14,9 @@ local MenuDef = {
     [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },
     [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"} } },
     [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"} } },
-    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },[9] = { A = { title = "BLOOM REVERB", e1 = {id="m9_r_decay", name="DECAY"}, e2 = {id="m9_r_bloom", name="BLOOM"}, e3 = {id="m9_r_damp", name="DAMP"}, e4 = {id="m9_r_predelay", name="PREDLY"}, k3 = {id="m9_r_mod", name="MOD"} } },
-    [10] = { A = { title = "NEXUS FILTERS", e1 = {id="m10_cut_l", name="CUT L"}, e2 = {id="m10_res_l", name="RES L"}, e3 = {id="m10_cut_r", name="CUT R"}, e4 = {id="m10_res_r", name="RES R"}, k2 = {id="m10_filt_byp", name="FILT"} }, B = { title = "NEXUS MASTER", e1 = {id="m10_master_vol", name="VOL"}, e2 = {id="m10_drive", name="DRIVE"}, e3 = {id="thermal_drift", name="AGE"}, e4 = {id="m10_adc_slew", name="ADC SLW"}, k2 = {id="m10_adc_mon", name="ADC"} }, C = { title = "NEXUS TAPE", e1 = {id="m10_tape_time", name="TIME"}, e2 = {id="m10_tape_fb", name="FDBK"}, e3 = {id="m10_tape_tone", name="TONE"}, e4 = {id="m10_tape_wow", name="WOW"}, k2 = {id="m10_tape_mute", name="MUTE"} } }
+    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },
+    [9] = { A = { title = "BLOOM REVERB", e1 = {id="m9_r_decay", name="DECAY"}, e2 = {id="m9_r_bloom", name="BLOOM"}, e3 = {id="m9_r_damp", name="DAMP"}, e4 = {id="m9_r_predelay", name="PREDLY"}, k3 = {id="m9_r_mod", name="MOD"} } },
+    [10] = { A = { title = "NEXUS FILTERS", e1 = {id="m10_cut_l", name="CUT L"}, e2 = {id="m10_res_l", name="RES L"}, e3 = {id="m10_cut_r", name="CUT R"}, e4 = {id="m10_res_r", name="RES R"}, k2 = {id="m10_filt_byp", name="FILT"}, k3 = {id="m10_adc_mon", name="ADC"} }, B = { title = "NEXUS TAPE", e1 = {id="m10_tape_mix", name="MIX"}, e2 = {id="m10_tape_time", name="TIME"}, e3 = {id="m10_tape_fb", name="FDBK"}, e4 = {id="m10_tape_wow", name="WOW"}, k2 = {id="m10_tape_tone", name="TONE"}, k3 = {id="m10_tape_mute", name="MUTE"} }, C = { title = "NEXUS MASTER", e1 = {id="m10_master_vol", name="VOL"}, e2 = {id="m10_drive", name="DRIVE"}, e3 = {id="thermal_drift", name="AGE"}, e4 = {id="m10_adc_slew", name="ADC SLW"} } }
 }
 
 local function register_touch(G, param_id)
@@ -146,6 +147,9 @@ function ScreenUI.draw_node_menu(G)
         local val = ""; pcall(function() val = params:string(p_id) end)
         screen.level(15); screen.move(126, 45); screen.text_right(val); local w = screen.text_extents(val)
         screen.level(4); screen.move(126 - w - 2, 45); screen.text_right("K2 MODE: ")
+    elseif node.module >= 5 and node.module <= 8 and node.type == "out" and (node.id == 40 or node.id == 44 or node.id == 48 or node.id == 52) then
+        local slew_val = 0; pcall(function() slew_val = params:get("m" .. node.module .. "_env_slew") end)
+        screen.level(4); screen.move(10, 55); screen.text("E2 Slew: "); screen.level(15); screen.text(string.format("%.2fs", slew_val))
     elseif node.module >= 5 and node.module <= 8 and node.type == "in" and (node.id == 38 or node.id == 42 or node.id == 46 or node.id == 50) then
         local p_id = "m" .. node.module .. "_env_src_sel"
         local val = ""; pcall(function() val = params:string(p_id) end)
@@ -233,7 +237,8 @@ function ScreenUI.enc(G, n, d)
         elseif n == 2 then
             if node.module == 10 and node.type == "in" and (node.id == 57 or node.id == 58) then register_touch(G, "node_pan_" .. node.id); node.pan = util.clamp((node.pan or 0) + (d * 0.01), -1.0, 1.0); if Matrix.update_node_params then Matrix.update_node_params(node) end
             elseif node.module == 2 and node.type == "in" and node.id == 14 then register_touch(G, "m2_clk_thresh"); pcall(function() params:delta("m2_clk_thresh", d) end)
-            elseif node.module == 3 and node.type == "in" and node.id == 23 then register_touch(G, "m3_ping_thresh"); pcall(function() params:delta("m3_ping_thresh", d) end) end
+            elseif node.module == 3 and node.type == "in" and node.id == 23 then register_touch(G, "m3_ping_thresh"); pcall(function() params:delta("m3_ping_thresh", d) end)
+            elseif node.module >= 5 and node.module <= 8 and node.type == "out" and (node.id == 40 or node.id == 44 or node.id == 48 or node.id == 52) then register_touch(G, "m" .. node.module .. "_env_slew"); pcall(function() params:delta("m" .. node.module .. "_env_slew", d) end) end
         end
     elseif G.focus.state == "menu" then
         if not G.focus.module_id or not G.focus.page then return end
