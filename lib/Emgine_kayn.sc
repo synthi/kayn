@@ -1,8 +1,8 @@
-// lib/Engine_Kayn.sc v0.525
-// CHANGELOG v0.525:
-// 1. FIX FATAL: Corregido Rate Mismatch en Lag3.kr del Tape Echo. Se aplicó A2K.kr a cv_d1.
-// CHANGELOG v0.524:
-// 1. DSP: Tape Echo clonado exactamente de Elianne_Nexus (Lag3, Saturación con Delay1, Filtro dinámico).
+// lib/Engine_Kayn.sc v0.530
+// CHANGELOG v0.530:
+// 1. ARQUITECTURA: Topología de 66 nodos. DMZ expandida a 37 buses (Índices 0 y 1 vacíos).
+// 2. DSP: Módulo 9 purificado a Bloom Reverb. Bucle FDN corregido con HPF y tanh para Decay infinito.
+// 3. DSP: Tape Echo reintegrado al Nexus con salidas estéreo dedicadas.
 
 Engine_Kayn : CroneEngine {
     var <bus_nodes_tx, <bus_nodes_rx, <bus_levels, <bus_pans, <bus_physics;
@@ -13,18 +13,18 @@ Engine_Kayn : CroneEngine {
 
     alloc {
         var wt_node, wt_master;
-        // DMZ 34x34: Pedimos 34 buses. Los índices 0 y 1 son sacrificables (Dummy Nodes) para el bug de Fates.
-        bus_nodes_tx = Bus.audio(context.server, 34);
-        bus_nodes_rx = Bus.audio(context.server, 34);
-        bus_levels = Bus.control(context.server, 64);
-        bus_pans = Bus.control(context.server, 64);
+        // DMZ 37x37: Índices 0 y 1 son Dummy Nodes para evadir el bug de Fates.
+        bus_nodes_tx = Bus.audio(context.server, 37);
+        bus_nodes_rx = Bus.audio(context.server, 37);
+        bus_levels = Bus.control(context.server, 67);
+        bus_pans = Bus.control(context.server, 67);
         bus_physics = Bus.control(context.server, 10);
         
-        64.do { |i| bus_levels.setAt(i, 0.33) };
+        66.do { |i| bus_levels.setAt(i+1, 0.33) };
         
         synth_mods = Array.newClear(10);
-        synth_matrix_rows = Array.newClear(34);
-        matrix_state = Array.fill(34, { Array.fill(34, 0.0) });
+        synth_matrix_rows = Array.newClear(37);
+        matrix_state = Array.fill(37, { Array.fill(37, 0.0) });
 
         wt_node = Signal.fill(1024, { |i| tanh(i.linlin(0, 1023, -1.0, 1.0) * 1.3) / tanh(1.3) });
         ca3080_node_buf = Buffer.loadCollection(context.server, wt_node.asWavetable);
@@ -36,14 +36,14 @@ Engine_Kayn : CroneEngine {
         OSCFunc({ |msg| NetAddr("127.0.0.1", 10111).sendMsg("/kayn_levels", *msg.drop(3)); }, '/kayn_levels', context.server.addr).fix;
 
         SynthDef(\Kayn_MatrixAmps, {
-            var tx = InFeedback.ar(bus_nodes_tx.index, 34);
-            var rx = InFeedback.ar(bus_nodes_rx.index, 34);
+            var tx = InFeedback.ar(bus_nodes_tx.index, 37);
+            var rx = InFeedback.ar(bus_nodes_rx.index, 37);
             SendReply.kr(Impulse.kr(15), '/kayn_levels', Amplitude.kr(tx ++ rx, 0.05, 0.1));
         }).add;
 
         SynthDef(\Kayn_MatrixRow, { arg out_bus;
-            var tx = InFeedback.ar(bus_nodes_tx.index, 34);
-            var gains = NamedControl.kr(\gains, 0 ! 34);
+            var tx = InFeedback.ar(bus_nodes_tx.index, 37);
+            var gains = NamedControl.kr(\gains, 0 ! 37);
             Out.ar(out_bus, (tx * gains).sum);
         }).add;
 
@@ -65,7 +65,7 @@ Engine_Kayn : CroneEngine {
                 out3_wave=0, out4_wave=0, phys_bus;
             var morph_lag = In.kr(phys_bus + 7);
             var fm1_in, pv1, lin_fm1, exp_fm1, morph_mod1, cv_sum1, exp_core1, freq1, ph1, tri1, sqr1, saw1, pul1, sin1, mix1, sig_out3;
-            var fm2_in, pv2, lin_fm2, exp_fm2, morph_mod2, cv_sum2, exp_core2, freq2, ph2, tri2, sqr2, saw2, pul2, sin2, mix2, sig_out4;
+            var fm2_in, pv2, lin_fm2, exp_fm2, pwm_mod2, cv_sum2, exp_core2, freq2, ph2, tri2, sqr2, saw2, pul2, sin2, mix2, sig_out4;
             
             tune1 = Lag.kr(tune1, morph_lag); fine1 = Lag.kr(fine1, morph_lag); pwm1 = Lag.kr(pwm1, morph_lag); morph1 = Lag.kr(morph1, morph_lag);
             tune2 = Lag.kr(tune2, morph_lag); fine2 = Lag.kr(fine2, morph_lag); pwm2 = Lag.kr(pwm2, morph_lag); morph2 = Lag.kr(morph2, morph_lag);
@@ -95,7 +95,7 @@ Engine_Kayn : CroneEngine {
             pv2 = Lag.ar(InFeedback.ar(in_pv2) * In.kr(lvl_pv2), 0.0001);
             lin_fm2 = fm2_in * (K2A.ar(fm2_mode) < 0.5);
             exp_fm2 = fm2_in * InRange.ar(K2A.ar(fm2_mode), 0.5, 1.5);
-            morph_mod2 = fm2_in * (K2A.ar(fm2_mode) > 1.5); // FIX: Asignado a Morph
+            pwm_mod2 = fm2_in * (K2A.ar(fm2_mode) > 1.5);
             
             cv_sum2 = (fine2 * 0.1) + (pv2 * pv2_mode) + exp_fm2;
             exp_core2 = K2A.ar(Select.kr(range2,[tune2, tune2*0.001])) * (2.0 ** (cv_sum2 * 10.0));
@@ -105,9 +105,9 @@ Engine_Kayn : CroneEngine {
             tri2 = LeakDC.ar((ph2 * 2 - 1).abs * 2 - 1);
             sqr2 = (ph2 > 0.5) * 2 - 1;
             saw2 = (ph2 * 2 - 1) + (HPF.ar(Impulse.ar(freq2), 10000) * 0.1);
-            pul2 = (tri2 > (((pwm2 + (pv2 * (1 - pv2_mode))).clip(0.0, 1.0) * 2) - 1)) * 2 - 1; // FIX: Eliminado pwm_mod2
+            pul2 = (tri2 > (((pwm2 + (pv2 * (1 - pv2_mode)) + pwm_mod2).clip(0.0, 1.0) * 2) - 1)) * 2 - 1;
             sin2 = (LeakDC.ar(tri2 - (tri2.pow(3) / 6.0)) + (sqr2 * 0.02)) * 1.2;
-            mix2 = SelectX.ar((morph2 + (morph_mod2 * 5.0)).clip(0,1) * 9.0,[sin2, tri2, saw2, sqr2, pul2, sin2.neg, tri2, saw2.neg, sqr2, pul2.neg]); // FIX: Asignado a Morph
+            mix2 = SelectX.ar((morph2 + (fm2_in * fm2_mode * 5.0)).clip(0,1) * 9.0,[sin2, tri2, saw2, sqr2, pul2, sin2.neg, tri2, saw2.neg, sqr2, pul2.neg]);
             sig_out4 = Select.ar(out4_wave,[sin2, tri2, saw2, sqr2, pul2]);
             
             Out.ar(out_o1, mix1.clip(-1.0, 1.0) * In.kr(lvl_o1)); Out.ar(out_o2, mix2.clip(-1.0, 1.0) * In.kr(lvl_o2));
@@ -126,8 +126,7 @@ Engine_Kayn : CroneEngine {
             var morph_lag = In.kr(phys_bus + 7);
             var cv1, cv2, cv_sum, mod_rise, mod_fall, mod_clk, mod_slow, mod_morph;
             var n1, n2, slow_out, clk_int, clk_ext, clk_trig, samp_in, stepped_out, coupler_out;
-            var slew_in, rate_cv, actual_in, smooth_out, cycle_trig, next_state;
-            var local_stoch, cycle_state, slew_fb, diff, shape_mod, rise_rate, fall_rate;
+            var slew_in, rate_cv, actual_in, smooth_out, cycle_state, cycle_trig, next_state;
             
             tilt1 = Lag.kr(tilt1, morph_lag); tilt2 = Lag.kr(tilt2, morph_lag); slow_rate = Lag.kr(slow_rate, morph_lag);
             rise = Lag.kr(rise, morph_lag); fall = Lag.kr(fall, morph_lag); slew_shape = Lag.kr(slew_shape, morph_lag);
@@ -138,38 +137,19 @@ Engine_Kayn : CroneEngine {
             cv_sum = (cv1 * (abs(K2A.ar(cv1_dest) - (0..4)) < 0.5)) + (cv2 * (abs(K2A.ar(cv2_dest) - (0..4)) < 0.5));
             mod_rise = cv_sum[0]; mod_fall = cv_sum[1]; mod_clk = cv_sum[2]; mod_slow = cv_sum[3]; mod_morph = cv_sum[4];
             
-            // FIX: Añadido LFNoise2.ar(slow_rate) como opción 6 (SlowWalk)
-            n1 = SelectX.ar((K2A.ar(type1) + mod_morph).clip(0, 6),[PinkNoise.ar, WhiteNoise.ar*0.5, Crackle.ar(1.9), Dust2.ar(1000)*0.9, LFNoise1.ar(500)*0.7, Latch.ar(WhiteNoise.ar, Dust.ar(50))*0.4, LFNoise2.ar(slow_rate)]);
-            n2 = SelectX.ar((K2A.ar(type2) + mod_morph).clip(0, 6),[PinkNoise.ar, WhiteNoise.ar*0.5, Crackle.ar(1.9), Dust2.ar(1000)*0.9, LFNoise1.ar(500)*0.7, Latch.ar(WhiteNoise.ar, Dust.ar(50))*0.4, LFNoise2.ar(slow_rate)]);
+            n1 = SelectX.ar((K2A.ar(type1) + mod_morph).clip(0, 6),[PinkNoise.ar, WhiteNoise.ar*0.5, Crackle.ar(1.9), Dust2.ar(1000)*0.9, LFNoise1.ar(500)*0.7, Latch.ar(WhiteNoise.ar, Dust.ar(50))*0.4, LFNoise2.ar(slow_rate)*0.8]);
+            n2 = SelectX.ar((K2A.ar(type2) + mod_morph).clip(0, 6),[PinkNoise.ar, WhiteNoise.ar*0.5, Crackle.ar(1.9), Dust2.ar(1000)*0.9, LFNoise1.ar(500)*0.7, Latch.ar(WhiteNoise.ar, Dust.ar(50))*0.4, LFNoise2.ar(slow_rate)*0.8]);
             n1 = BHiShelf.ar(BLowShelf.ar(n1, 1000, 1.0, tilt1 * -12.0), 1000, 1.0, tilt1 * 12.0);
             n2 = BHiShelf.ar(BLowShelf.ar(n2, 1000, 1.0, tilt2 * -12.0), 1000, 1.0, tilt2 * 12.0);
             
             slew_in = InFeedback.ar(in_sig) * In.kr(lvl_sig);
             rate_cv = InFeedback.ar(in_rate) * In.kr(lvl_rate);
-            
-            // FIX: LocalIn(2) para Cycle State y Slew Feedback (Shape)
-            local_stoch = LocalIn.ar(2);
-            cycle_state = local_stoch[0];
-            slew_fb = local_stoch[1];
-            
+            cycle_state = LocalIn.ar(1);
             actual_in = Select.ar(K2A.ar(cycle_mode),[slew_in, cycle_state]);
-            
-            // Slew Shape Logic (Log -> Lin -> Exp)
-            diff = (actual_in - slew_fb).abs.clip(0.001, 1.0);
-            shape_mod = SelectX.ar(slew_shape * 2.0,[
-                diff, // Logarithmic (RC)
-                DC.ar(1.0), // Linear
-                (1.01 - diff).max(0.01) // Exponential
-            ]);
-            
-            rise_rate = 1.0 / (rise * (2.0 ** ((mod_rise + rate_cv) * 10.0))).max(0.001);
-            fall_rate = 1.0 / (fall * (2.0 ** ((mod_fall + rate_cv) * 10.0))).max(0.001);
-            
-            smooth_out = Slew.ar(actual_in, rise_rate * shape_mod, fall_rate * shape_mod);
-            
+            smooth_out = Slew.ar(actual_in, 1.0 / (rise * (2.0 ** ((mod_rise + rate_cv) * 10.0))).max(0.001), 1.0 / (fall * (2.0 ** ((mod_fall + rate_cv) * 10.0))).max(0.001));
             cycle_trig = Schmidt.ar(smooth_out, 0.01, 0.99);
             next_state = 1.0 - cycle_trig;
-            LocalOut.ar([next_state, smooth_out]);
+            LocalOut.ar(next_state);
             
             clk_int = Impulse.ar((clk_rate * (2.0 ** (mod_clk * 10.0))).clip(0.01, 1000));
             clk_ext = Trig1.ar(Schmidt.ar(InFeedback.ar(in_trig) * In.kr(lvl_trig), clk_thresh, clk_thresh + 0.1), 0.001);
@@ -295,31 +275,15 @@ Engine_Kayn : CroneEngine {
             Out.ar(out_env, env_out * In.kr(lvl_oenv));
         }).add;
 
-        SynthDef(\Kayn_SpaceTime, {
+        SynthDef(\Kayn_BloomReverb, {
             arg in_aud, in_cv, out_l, out_r, lvl_aud, lvl_cv, lvl_ol, lvl_or,
-                mode=0, cv_dest=0,
-                t_drive=1.0, t_time=0.3, t_fb=0.4, t_wow=0.0, t_tone=0,
-                r_decay=0.5, r_bloom=0.5, r_damp=10000, r_predelay=0.0, r_mod=0,
+                cv_dest=0, r_decay=0.9, r_bloom=0.5, r_damp=10000, r_predelay=0.0, r_mod=0,
                 phys_bus, shaper_buf;
 
             var morph_lag = In.kr(phys_bus + 7);
             var aud_in, cv_in, cv_d0, cv_d1, cv_d2, cv_d3;
-            
-            var local_in, tape_local, rev_local;
-            var tape_fb_out, rev_fb_out;
-            
-            // Tape Vars (Elianne Clone)
-            var tape_time_lag, tape_fb_amt, tape_wow_amt_k, tape_tone_freq, tape_erosion;
-            var tape_in_sig, wow, flutter, tape_dt, tape_raw, tape_sat_sig, tape_physics_cutoff, tape_out;
-            var loop_dust_trig, loop_dropout_env, loop_gain_loss;
-            var tape_out_l, tape_out_r;
-            
-            // Reverb Vars (Bloom Refined)
-            var rev_decay_time, rev_bloom_k, rev_damp_k, rev_predelay, rev_in;
-            var mod_rate, mod_depth, lfo_l, lfo_r, rev_tank, rev_tank_l, rev_tank_r, rev_out_l, rev_out_r;
-            var primes_l, primes_r, combs_l, combs_r, ap_l, ap_r;
-            
-            var final_l, final_r;
+            var rev_decay_time, rev_bloom_k, rev_damp_k, rev_predelay_k, rev_in;
+            var mod_rate, mod_depth, lfo_l, lfo_r, rev_local, rev_fb_sig, rev_tank_l, rev_tank_r;
 
             aud_in = InFeedback.ar(in_aud) * In.kr(lvl_aud);
             cv_in = Lag.ar(InFeedback.ar(in_cv) * In.kr(lvl_cv), 0.0001);
@@ -329,112 +293,59 @@ Engine_Kayn : CroneEngine {
             cv_d2 = cv_in * InRange.ar(K2A.ar(cv_dest), 1.5, 2.5);
             cv_d3 = cv_in * (K2A.ar(cv_dest) > 2.5);
 
-            local_in = LocalIn.ar(4);
-            tape_local = local_in[0..1];
-            rev_local = local_in[2..3];
-
-            // ==========================================
-            // --- TAPE ECHO (Elianne Clone) ---
-            // ==========================================
-            // FIX: Lag3.kr fijo en 0.5s para inercia física. A2K.kr en cv_d1 para evitar Rate Mismatch.
-            tape_time_lag = Lag3.kr((t_time + (A2K.kr(cv_d1) * 2.0)).clip(0.01, 6.0), 0.5); 
-            tape_fb_amt = (Lag.kr(t_fb, morph_lag) + cv_d2).clip(0.0, 1.2);
-            tape_wow_amt_k = A2K.kr((Lag.kr(t_wow, morph_lag) + cv_d3).clip(0.0, 1.0));
-            tape_tone_freq = Select.kr(t_tone,[18000, 8000, 4000, 1500]);
-            tape_erosion = Select.kr(t_tone,[0.0, 0.0, 0.1, 0.3]);
-
-            // FIX: Entrada mono expandida a estéreo
-            tape_in_sig = (aud_in ! 2) + (tape_local * tape_fb_amt);
-
-            wow = OnePole.ar(LFNoise2.ar(Rand(0.5, 2.0)) * tape_wow_amt_k * 0.05, 0.95);
-            flutter = LFNoise1.ar(15) * tape_wow_amt_k * 0.005;
-            
-            tape_dt = (tape_time_lag + wow + flutter).clip(0.01, 6.1);
-            tape_raw = DelayC.ar(tape_in_sig, 6.2, tape_dt);
-            
-            // FIX: Ecuación de saturación exacta de Elianne
-            tape_sat_sig = (tape_raw + (Delay1.ar(tape_raw) * 0.2)).tanh;
-            
-            // FIX: Filtro dinámico exacto de Elianne
-            tape_physics_cutoff = LinExp.kr(tape_time_lag.max(0.01), 0.01, 6.0, 15000, 1500);
-            tape_out = LPF.ar(tape_sat_sig, tape_physics_cutoff);
-            
-            loop_dust_trig = Dust.ar(tape_erosion * 15);
-            loop_dropout_env = Decay.ar(loop_dust_trig, 0.1);
-            loop_gain_loss = (loop_dropout_env * tape_erosion).clip(0, 0.9);
-            tape_out = tape_out * (1.0 - loop_gain_loss);
-
-            tape_fb_out = tape_out;
-            tape_out_l = tape_out[0];
-            tape_out_r = tape_out[1];
-
-            // ==========================================
-            // --- BLOOM REVERB (Refinada) ---
-            // ==========================================
             rev_decay_time = A2K.kr((Lag.kr(r_decay, morph_lag) + cv_d0).clip(0.0, 1.1)); 
             rev_bloom_k = A2K.kr((Lag.kr(r_bloom, morph_lag) + cv_d1).clip(0.01, 2.0));
             rev_damp_k = A2K.kr((Lag.kr(r_damp, morph_lag) + (cv_d2 * 10000)).clip(200, 18000));
-            
-            // FIX: Predelay max 1.0s
-            rev_predelay = (Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 1.0);
-            rev_in = LeakDC.ar(DelayN.ar(aud_in ! 2, 1.0, rev_predelay));
-            
-            rev_in = AllpassN.ar(rev_in, 0.05, 0.017, 0.5);
-            rev_in = AllpassN.ar(rev_in, 0.05, 0.023, 0.5);
+            rev_predelay_k = A2K.kr((Lag.kr(r_predelay, morph_lag) + cv_d3).clip(0.0, 1.0));
 
-            rev_tank = rev_in + (rev_local * rev_decay_time);
+            rev_in = LeakDC.ar(DelayN.ar(aud_in ! 2, 1.0, rev_predelay_k));
+            
+            // Diffuser block
+            rev_in = AllpassC.ar(rev_in, 0.05, 0.017, 0.5);
+            rev_in = AllpassC.ar(rev_in, 0.05, 0.023, 0.5);
+
+            rev_local = LocalIn.ar(2);
+            rev_fb_sig = rev_in + (rev_local * rev_decay_time);
+            rev_fb_sig = HPF.ar(rev_fb_sig, 80).tanh; // DC Blocker + Softclip for infinite freeze
 
             mod_rate = Select.kr(r_mod,[0.0, 0.5, 1.2, 5.0]);
             mod_depth = Select.kr(r_mod,[0.0, 0.0005, 0.0015, 0.003]);
             lfo_l = LFNoise2.kr(mod_rate) * mod_depth;
             lfo_r = LFNoise2.kr(mod_rate * 1.1) * mod_depth;
 
-            // FIX: Matrices de números primos para erradicar resonancia F4/F5
-            primes_l =[0.0297, 0.0371, 0.0411, 0.0437, 0.0511, 0.0593];
-            primes_r =[0.0313, 0.0389, 0.0421, 0.0467, 0.0523, 0.0601];
-
-            combs_l = primes_l.collect { |pt| CombL.ar(rev_tank[0], 0.2, pt + lfo_l, rev_bloom_k) }.sum;
-            combs_r = primes_r.collect { |pt| CombL.ar(rev_tank[1], 0.2, pt + lfo_r, rev_bloom_k) }.sum;
-
-            ap_l = combs_l; ap_r = combs_r;
-            2.do { 
-                ap_l = AllpassC.ar(ap_l, 0.05, Rand(0.01, 0.05), rev_bloom_k * 2.0); 
-                ap_r = AllpassC.ar(ap_r, 0.05, Rand(0.01, 0.05), rev_bloom_k * 2.0); 
-            };
-
-            rev_tank_l = LeakDC.ar(LPF.ar(ap_l, rev_damp_k)).tanh;
-            rev_tank_r = LeakDC.ar(LPF.ar(ap_r, rev_damp_k)).tanh;
-
-            rev_fb_out =[rev_tank_r, rev_tank_l];
+            rev_tank_l = AllpassC.ar(rev_fb_sig[0], 0.1, 0.031 + lfo_l, rev_bloom_k);
+            rev_tank_l = AllpassC.ar(rev_tank_l, 0.1, 0.047, rev_bloom_k);
             
-            rev_out_l = rev_tank_l;
-            rev_out_r = rev_tank_r;
+            rev_tank_r = AllpassC.ar(rev_fb_sig[1], 0.1, 0.037 + lfo_r, rev_bloom_k);
+            rev_tank_r = AllpassC.ar(rev_tank_r, 0.1, 0.053, rev_bloom_k);
 
-            // ==========================================
-            // --- GLOBAL FEEDBACK & MIX ---
-            // ==========================================
-            LocalOut.ar(tape_fb_out ++ rev_fb_out);
+            rev_tank_l = LeakDC.ar(LPF.ar(rev_tank_l, rev_damp_k)).tanh;
+            rev_tank_r = LeakDC.ar(LPF.ar(rev_tank_r, rev_damp_k)).tanh;
 
-            final_l = Select.ar(K2A.ar(mode),[tape_out_l, rev_out_l]);
-            final_r = Select.ar(K2A.ar(mode),[tape_out_r, rev_out_r]);
+            LocalOut.ar([rev_tank_r, rev_tank_l]); // Cross-feedback
 
-            Out.ar(out_l, Shaper.ar(shaper_buf, final_l.clip(-1.0, 1.0)) * In.kr(lvl_ol));
-            Out.ar(out_r, Shaper.ar(shaper_buf, final_r.clip(-1.0, 1.0)) * In.kr(lvl_or));
+            Out.ar(out_l, Shaper.ar(shaper_buf, rev_tank_l.clip(-1.0, 1.0)) * In.kr(lvl_ol));
+            Out.ar(out_r, Shaper.ar(shaper_buf, rev_tank_r.clip(-1.0, 1.0)) * In.kr(lvl_or));
         }).add;
 
         SynthDef(\Kayn_Nexus, {
-            arg in_ml, in_mr, in_al, in_ar, out_ml, out_mr, hw_out_l, hw_out_r,
-                lvl_ml, lvl_mr, lvl_al, lvl_ar, pan_ml, pan_mr, pan_al, pan_ar, lvl_oml, lvl_omr,
+            arg in_ml, in_mr, in_al, in_ar, out_ml, out_mr, hw_out_l, hw_out_r, out_tl, out_tr,
+                lvl_ml, lvl_mr, lvl_al, lvl_ar, pan_ml, pan_mr, pan_al, pan_ar, lvl_oml, lvl_omr, lvl_otl, lvl_otr,
                 cut_l=18000, cut_r=18000, res_l=0, res_r=0, filt_byp=0,
-                master_vol=1.0, drive=1.0, adc_mon=0, cv_dest_l=0, cv_dest_r=0, phys_bus, master_shaper_buf;
+                master_vol=1.0, drive=1.0, adc_mon=0, cv_dest_l=0, cv_dest_r=0,
+                tape_time=0.3, tape_fb=0.4, tape_wow=0.0, tape_tone=0, tape_mute=0,
+                phys_bus, shaper_buf, master_shaper_buf;
                 
             var morph_lag = In.kr(phys_bus + 7);
-            var cv_l, cv_r, dest_l, dest_r, vca_mod_l, vca_mod_r, pan_mod_l, pan_mod_r, cut_mod_l, cut_mod_r;
-            var ml, mr, adc, sum, filt_l, filt_r, byp, filt_sig_l, filt_sig_r, master, final_out;
+            var cv_l, cv_r, dest_l, dest_r, vca_mod_l, vca_mod_r, pan_mod_l, pan_mod_r, cut_mod_l, cut_mod_r, time_mod_l, time_mod_r, fb_mod_l, fb_mod_r, time_mod, fb_mod;
+            var ml, mr, adc, sum, filt_l, filt_r, byp, filt_sig_l, filt_sig_r, filt_sig;
+            var tape_in, shared_wow, shared_flutter, shared_mod, tape_del_l, tape_del_r, tape_sat, tape_tone_freq, tape_filt, tape_out;
+            var master, final_out;
             
             cut_l = Lag.kr(cut_l, morph_lag); cut_r = Lag.kr(cut_r, morph_lag); 
             res_l = Lag.kr(res_l, morph_lag); res_r = Lag.kr(res_r, morph_lag);
             drive = Lag.kr(drive, morph_lag); master_vol = Lag.kr(master_vol, morph_lag);
+            tape_time = Lag.kr(tape_time, morph_lag); tape_fb = Lag.kr(tape_fb, morph_lag); tape_wow = Lag.kr(tape_wow, morph_lag);
             
             cv_l = InFeedback.ar(in_al) * In.kr(lvl_al);
             cv_r = InFeedback.ar(in_ar) * In.kr(lvl_ar);
@@ -444,11 +355,18 @@ Engine_Kayn : CroneEngine {
             
             vca_mod_l = cv_l * (dest_l < 0.5);
             pan_mod_l = cv_l * InRange.ar(dest_l, 0.5, 1.5);
-            cut_mod_l = cv_l * (dest_l > 1.5);
+            cut_mod_l = cv_l * InRange.ar(dest_l, 1.5, 2.5);
+            time_mod_l = cv_l * InRange.ar(dest_l, 2.5, 3.5);
+            fb_mod_l = cv_l * (dest_l > 3.5);
             
             vca_mod_r = cv_r * (dest_r < 0.5);
             pan_mod_r = cv_r * InRange.ar(dest_r, 0.5, 1.5);
-            cut_mod_r = cv_r * (dest_r > 1.5);
+            cut_mod_r = cv_r * InRange.ar(dest_r, 1.5, 2.5);
+            time_mod_r = cv_r * InRange.ar(dest_r, 2.5, 3.5);
+            fb_mod_r = cv_r * (dest_r > 3.5);
+            
+            time_mod = time_mod_l + time_mod_r;
+            fb_mod = fb_mod_l + fb_mod_r;
             
             ml = Pan2.ar((InFeedback.ar(in_ml) * In.kr(lvl_ml)) * (1.0 + vca_mod_l).clip(0, 2), (In.kr(pan_ml) + pan_mod_l).clip(-1, 1));
             mr = Pan2.ar((InFeedback.ar(in_mr) * In.kr(lvl_mr)) * (1.0 + vca_mod_r).clip(0, 2), (In.kr(pan_mr) + pan_mod_r).clip(-1, 1));
@@ -460,21 +378,44 @@ Engine_Kayn : CroneEngine {
             byp = K2A.ar(filt_byp);
             filt_sig_l = Select.ar(byp,[filt_l, sum[0]]);
             filt_sig_r = Select.ar(byp,[filt_r, sum[1]]);
+            filt_sig = [filt_sig_l, filt_sig_r];
             
+            // --- TAPE ECHO ---
+            tape_in = filt_sig + (LocalIn.ar(2) * (tape_fb + fb_mod).clip(0, 1.2));
+            
+            shared_wow = OnePole.ar(LFNoise2.ar(Rand(0.5, 2.0)) * tape_wow * 0.005, 0.95);
+            shared_flutter = LFNoise1.ar(15) * tape_wow * 0.0005;
+            shared_mod = shared_wow + shared_flutter;
+
+            tape_del_l = DelayC.ar(tape_in[0], 4.0, (tape_time + time_mod).clip(0.01, 4.0) + shared_mod);
+            tape_del_r = DelayC.ar(tape_in[1], 4.0, ((tape_time + time_mod).clip(0.01, 4.0) * 1.02) + 0.005 + shared_mod);
+
+            tape_sat = (BPeakEQ.ar([tape_del_l, tape_del_r], 100, 1.0, drive * 3.0) * drive).tanh;
+            tape_sat = LeakDC.ar(tape_sat);
+            
+            tape_tone_freq = Select.kr(tape_tone,[18000, 8000, 4000, 1500]);
+            tape_filt = LPF.ar(tape_sat, tape_tone_freq);
+            
+            LocalOut.ar(tape_filt);
+            tape_out = tape_filt;
+            
+            // --- MASTER ---
             adc = SoundIn.ar([0, 1]) * K2A.ar(adc_mon);
-            master =[filt_sig_l, filt_sig_r] + adc;
+            master = filt_sig + (tape_out * (1.0 - tape_mute)) + adc;
             final_out = Limiter.ar(Shaper.ar(master_shaper_buf, (master * master_vol).clip(-1.0, 1.0)), -0.11.dbamp);
             
             Out.ar(out_ml, final_out[0] * In.kr(lvl_oml)); Out.ar(out_mr, final_out[1] * In.kr(lvl_omr));
             Out.ar(hw_out_l, final_out[0]); Out.ar(hw_out_r, final_out[1]);
+            Out.ar(out_tl, Shaper.ar(shaper_buf, tape_out[0].clip(-1.0, 1.0)) * In.kr(lvl_otl)); Out.ar(out_tr, Shaper.ar(shaper_buf, tape_out[1].clip(-1.0, 1.0)) * In.kr(lvl_otr));
         }).add;
 
         context.server.sync;
 
         synth_matrix_amps = Synth.new(\Kayn_MatrixAmps,[], context.xg, \addToHead);
-        34.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
+        37.do { |i| synth_matrix_rows[i] = Synth.new(\Kayn_MatrixRow,[\out_bus, bus_nodes_rx.index + i], context.xg, \addToHead); };
         
-        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+32, \out_r, bus_nodes_tx.index+33, \lvl_l, bus_levels.index+62, \lvl_r, bus_levels.index+63, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
+        // DMZ 37x37: Índices 0 y 1 vacíos. Empezamos en 2 (que corresponde a tx_idx=3 en Lua).
+        synth_adc = Synth.new(\Kayn_ADC,[\out_l, bus_nodes_tx.index+34, \out_r, bus_nodes_tx.index+35, \lvl_l, bus_levels.index+64, \lvl_r, bus_levels.index+65, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToHead);
         
         synth_mods[0] = Synth.new(\Kayn_1023,[\in_fm1, bus_nodes_rx.index+2, \in_fm2, bus_nodes_rx.index+3, \in_pv1, bus_nodes_rx.index+4, \in_pv2, bus_nodes_rx.index+5, \out_o1, bus_nodes_tx.index+2, \out_o2, bus_nodes_tx.index+3, \out_i1, bus_nodes_tx.index+4, \out_i2, bus_nodes_tx.index+5, \lvl_fm1, bus_levels.index+0, \lvl_fm2, bus_levels.index+1, \lvl_pv1, bus_levels.index+2, \lvl_pv2, bus_levels.index+3, \lvl_o1, bus_levels.index+4, \lvl_o2, bus_levels.index+5, \lvl_i1, bus_levels.index+6, \lvl_i2, bus_levels.index+7, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         synth_mods[1] = Synth.new(\Kayn_Stochastic,[\in_cv1, bus_nodes_rx.index+6, \in_cv2, bus_nodes_rx.index+7, \in_sig, bus_nodes_rx.index+8, \in_rate, bus_nodes_rx.index+9, \in_samp, bus_nodes_rx.index+10, \in_trig, bus_nodes_rx.index+11, \out_n1, bus_nodes_tx.index+6, \out_n2, bus_nodes_tx.index+7, \out_smooth, bus_nodes_tx.index+8, \out_cycle, bus_nodes_tx.index+9, \out_stepped, bus_nodes_tx.index+10, \out_coupler, bus_nodes_tx.index+11, \lvl_cv1, bus_levels.index+8, \lvl_cv2, bus_levels.index+9, \lvl_sig, bus_levels.index+10, \lvl_rate, bus_levels.index+11, \lvl_samp, bus_levels.index+12, \lvl_trig, bus_levels.index+13, \lvl_n1, bus_levels.index+14, \lvl_n2, bus_levels.index+15, \lvl_smooth, bus_levels.index+16, \lvl_cycle, bus_levels.index+17, \lvl_stepped, bus_levels.index+18, \lvl_coupler, bus_levels.index+19, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
@@ -487,12 +428,12 @@ Engine_Kayn : CroneEngine {
             synth_mods[4+i] = Synth.new(\Kayn_CyberVCA,[\in_aud, bus_nodes_rx.index+rx_idx, \in_cv, bus_nodes_rx.index+rx_idx+1, \out_aud, bus_nodes_tx.index+tx_idx, \out_env, bus_nodes_tx.index+tx_idx+1, \lvl_aud, bus_levels.index+lvl_rx, \lvl_cv, bus_levels.index+lvl_rx+1, \lvl_oaud, bus_levels.index+lvl_tx, \lvl_oenv, bus_levels.index+lvl_tx+1, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         };
         
-        synth_mods[8] = Synth.new(\Kayn_SpaceTime,[\in_aud, bus_nodes_rx.index+28, \in_cv, bus_nodes_rx.index+29, \out_l, bus_nodes_tx.index+28, \out_r, bus_nodes_tx.index+29, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
+        synth_mods[8] = Synth.new(\Kayn_BloomReverb,[\in_aud, bus_nodes_rx.index+28, \in_cv, bus_nodes_rx.index+29, \out_l, bus_nodes_tx.index+28, \out_r, bus_nodes_tx.index+29, \lvl_aud, bus_levels.index+52, \lvl_cv, bus_levels.index+53, \lvl_ol, bus_levels.index+54, \lvl_or, bus_levels.index+55, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum], context.xg, \addToTail);
         
-        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+30, \in_mr, bus_nodes_rx.index+31, \in_al, bus_nodes_rx.index+32, \in_ar, bus_nodes_rx.index+33, \out_ml, bus_nodes_tx.index+30, \out_mr, bus_nodes_tx.index+31, \hw_out_l, context.out_b.index, \hw_out_r, context.out_b.index+1, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+60, \lvl_omr, bus_levels.index+61, \phys_bus, bus_physics.index, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
+        synth_mods[9] = Synth.new(\Kayn_Nexus,[\in_ml, bus_nodes_rx.index+30, \in_mr, bus_nodes_rx.index+31, \in_al, bus_nodes_rx.index+32, \in_ar, bus_nodes_rx.index+33, \out_ml, bus_nodes_tx.index+30, \out_mr, bus_nodes_tx.index+31, \hw_out_l, context.out_b.index, \hw_out_r, context.out_b.index+1, \out_tl, bus_nodes_tx.index+32, \out_tr, bus_nodes_tx.index+33, \lvl_ml, bus_levels.index+56, \lvl_mr, bus_levels.index+57, \lvl_al, bus_levels.index+58, \lvl_ar, bus_levels.index+59, \pan_ml, bus_pans.index+56, \pan_mr, bus_pans.index+57, \pan_al, bus_pans.index+58, \pan_ar, bus_pans.index+59, \lvl_oml, bus_levels.index+60, \lvl_omr, bus_levels.index+61, \lvl_otl, bus_levels.index+62, \lvl_otr, bus_levels.index+63, \phys_bus, bus_physics.index, \shaper_buf, ca3080_node_buf.bufnum, \master_shaper_buf, ca3080_master_buf.bufnum], context.xg, \addToTail);
 
-        this.addCommand("patch_set", "iif", { |msg| matrix_state[msg[1]-1][msg[2]-1] = msg[3]; synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
-        this.addCommand("patch_row_set", "is", { |msg| matrix_state[msg[1]-1] = msg[2].asString.split($,).collect({|i| i.asFloat}); synth_matrix_rows[msg[1]-1].set(\gains, matrix_state[msg[1]-1]); });
+        this.addCommand("patch_set", "iif", { |msg| matrix_state[msg[1]][msg[2]] = msg[3]; synth_matrix_rows[msg[1]].set(\gains, matrix_state[msg[1]]); });
+        this.addCommand("patch_row_set", "is", { |msg| matrix_state[msg[1]] = msg[2].asString.split($,).collect({|i| i.asFloat}); synth_matrix_rows[msg[1]].set(\gains, matrix_state[msg[1]]); });
         this.addCommand("pause_matrix_row", "i", { |msg| synth_matrix_rows[msg[1]].run(false) });
         this.addCommand("resume_matrix_row", "i", { |msg| synth_matrix_rows[msg[1]].run(true) });
         this.addCommand("set_in_level", "if", { |msg| bus_levels.setAt(msg[1] - 1, msg[2]) });
@@ -531,14 +472,8 @@ Engine_Kayn : CroneEngine {
             this.addCommand(m ++ "_env_src_sel", "i", { |msg| synth_mods[4+i].set(\env_src_sel, msg[1]) });
         };
 
-        // M9: SPACE-TIME CORE
-        this.addCommand("m9_mode", "i", { |msg| synth_mods[8].set(\mode, msg[1]) });
+        // M9: BLOOM REVERB
         this.addCommand("m9_cv_dest", "i", { |msg| synth_mods[8].set(\cv_dest, msg[1]) });
-        this.addCommand("m9_t_drive", "f", { |msg| synth_mods[8].set(\t_drive, msg[1]) });
-        this.addCommand("m9_t_time", "f", { |msg| synth_mods[8].set(\t_time, msg[1]) });
-        this.addCommand("m9_t_fb", "f", { |msg| synth_mods[8].set(\t_fb, msg[1]) });
-        this.addCommand("m9_t_wow", "f", { |msg| synth_mods[8].set(\t_wow, msg[1]) });
-        this.addCommand("m9_t_tone", "i", { |msg| synth_mods[8].set(\t_tone, msg[1]) });
         this.addCommand("m9_r_decay", "f", { |msg| synth_mods[8].set(\r_decay, msg[1]) });
         this.addCommand("m9_r_bloom", "f", { |msg| synth_mods[8].set(\r_bloom, msg[1]) });
         this.addCommand("m9_r_damp", "f", { |msg| synth_mods[8].set(\r_damp, msg[1]) });
@@ -547,6 +482,7 @@ Engine_Kayn : CroneEngine {
 
         // M10: NEXUS
         this.addCommand("m10_cut_l", "f", { |msg| synth_mods[9].set(\cut_l, msg[1]) }); this.addCommand("m10_cut_r", "f", { |msg| synth_mods[9].set(\cut_r, msg[1]) }); this.addCommand("m10_res_l", "f", { |msg| synth_mods[9].set(\res_l, msg[1]) }); this.addCommand("m10_res_r", "f", { |msg| synth_mods[9].set(\res_r, msg[1]) }); this.addCommand("m10_drive", "f", { |msg| synth_mods[9].set(\drive, msg[1]) }); this.addCommand("m10_filt_byp", "i", { |msg| synth_mods[9].set(\filt_byp, msg[1]) }); this.addCommand("m10_adc_mon", "i", { |msg| synth_mods[9].set(\adc_mon, msg[1]) }); this.addCommand("m10_master_vol", "f", { |msg| synth_mods[9].set(\master_vol, msg[1]) }); this.addCommand("m10_cv_dest_l", "i", { |msg| synth_mods[9].set(\cv_dest_l, msg[1]) }); this.addCommand("m10_cv_dest_r", "i", { |msg| synth_mods[9].set(\cv_dest_r, msg[1]) });
+        this.addCommand("m10_tape_time", "f", { |msg| synth_mods[9].set(\tape_time, msg[1]) }); this.addCommand("m10_tape_fb", "f", { |msg| synth_mods[9].set(\tape_fb, msg[1]) }); this.addCommand("m10_tape_wow", "f", { |msg| synth_mods[9].set(\tape_wow, msg[1]) }); this.addCommand("m10_tape_tone", "i", { |msg| synth_mods[9].set(\tape_tone, msg[1]) }); this.addCommand("m10_tape_mute", "i", { |msg| synth_mods[9].set(\tape_mute, msg[1]) });
     }
 
     free {
