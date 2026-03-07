@@ -1,16 +1,14 @@
--- lib/globals.lua v0.518
--- CHANGELOG v0.518:
--- 1. ARQUITECTURA: Implementada DMZ 34x34. tx_counter y rx_counter inician en 3.
--- CHANGELOG v0.516:
--- 1. FIX FATAL: Corregido el error tipográfico en G.module_by_col que crasheaba la UI.
--- 2. ARQUITECTURA: Implementado "Diagnostic Shift". Osc 1 Out es tx_idx=2. ADC Out R es tx_idx=1.
+-- lib/globals.lua v0.530
+-- CHANGELOG v0.530:
+-- 1. ARQUITECTURA: 66 nodos exactos. DMZ 37x37.
+-- 2. MÓDULOS: Mod 9 es Bloom Reverb. Mod 10 recupera Tape Sends.
 
 local G = {}
 
 G.booting = true
 G.screen_dirty = true
 G.node_levels = {}
-for i = 1, 64 do G.node_levels[i] = 0 end
+for i = 1, 66 do G.node_levels[i] = 0 end
 
 G.focus = { state = "idle", module_id = nil, page = nil, node_x = nil, node_y = nil, hold_time = 0 }
 G.shift_held = false
@@ -39,12 +37,12 @@ G.nodes = {}
 G.grid_map = {}
 
 G.module_by_col = {1,1, 2,2,2, 3,3, 4,4, 5, 6, 7, 8, 9, 10,10}
-G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP", "CYBER VCA 1", "CYBER VCA 2", "CYBER VCA 3", "CYBER VCA 4", "SPACE-TIME CORE", "NEXUS"}
+G.module_names = {"1023 DUAL VCO", "STOCHASTIC CORE", "SERGE VCFQ", "1005 MODAMP", "CYBER VCA 1", "CYBER VCA 2", "CYBER VCA 3", "CYBER VCA 4", "BLOOM REVERB", "NEXUS"}
 
 function G.init_nodes()
     for x = 1, 16 do G.grid_map[x] = {}; for y = 1, 8 do G.grid_map[x][y] = nil end end
     
-    -- DIAGNOSTIC SHIFT: Empezamos en 3 para que los nodos 1 y 2 sean Dummy Nodes (DMZ 34x34) y evadir el bug de Fates.
+    -- DMZ 37x37: Empezamos en 3 para que los índices 0 y 1 en SC queden vacíos.
     local node_id_counter = 1
     local tx_counter = 3
     local rx_counter = 3
@@ -55,7 +53,7 @@ function G.init_nodes()
         if type == "out" then
             node.tx_idx = tx_counter
             tx_counter = tx_counter + 1
-            if tx_counter > 34 then tx_counter = 3 end
+            if tx_counter > 36 then tx_counter = 3 end
         elseif type == "in" then
             node.rx_idx = rx_counter
             rx_counter = rx_counter + 1
@@ -100,19 +98,20 @@ function G.init_nodes()
         add_node(col, 7, "out", mod_idx, "Env Follower Out")
     end
 
-    -- MOD 9: SPACE-TIME CORE (IDs 53-56)
+    -- MOD 9: BLOOM REVERB (IDs 53-56)
     add_node(14, 1, "in", 9, "Audio In (Mono)")
     add_node(14, 2, "in", 9, "CV In")
-    add_node(14, 6, "out", 9, "FX Out L")
-    add_node(14, 7, "out", 9, "FX Out R")
+    add_node(14, 6, "out", 9, "Rev Out L")
+    add_node(14, 7, "out", 9, "Rev Out R")
 
-    -- MOD 10: NEXUS (IDs 57-64)
+    -- MOD 10: NEXUS (IDs 57-66)
     add_node(15, 1, "in", 10, "Modular In L"); add_node(16, 1, "in", 10, "Modular In R")
     add_node(15, 2, "in", 10, "CV L In"); add_node(16, 2, "in", 10, "CV R In")
     add_node(15, 6, "out", 10, "Master Out L"); add_node(16, 6, "out", 10, "Master Out R")
-    add_node(15, 7, "out", 10, "ADC Out L"); add_node(16, 7, "out", 10, "ADC Out R")
+    add_node(15, 7, "out", 10, "Tape Send L"); add_node(16, 7, "out", 10, "Tape Send R")
+    add_node(15, 8, "out", 10, "ADC Out L"); add_node(16, 8, "out", 10, "ADC Out R")
 
-    for src = 1, 64 do G.patch[src] = {}; for dst = 1, 64 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0, current_gain = 0.0 } end end
+    for src = 1, 66 do G.patch[src] = {}; for dst = 1, 66 do G.patch[src][dst] = { active = false, level = 1.0, pan = 0.0, current_gain = 0.0 } end end
 end
 
 return G
