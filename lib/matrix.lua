@@ -1,22 +1,19 @@
--- lib/matrix.lua v0.518
--- CHANGELOG v0.518:
--- 1. FIX: Matrix.init envuelto en clock.run para evitar OSC Flooding.
--- 2. FIX: Arrays de ruteo expandidos a 34 para la DMZ.
--- CHANGELOG v0.516:
--- 1. FIX: Ajuste de bucles a 64 nodos y 32 buses TX/RX.
+-- lib/matrix.lua v0.530
+-- CHANGELOG v0.530:
+-- 1. FIX: Ajuste de bucles a 66 nodos y 37 buses TX/RX para la DMZ.
 
 local Matrix = {}
 
 local function evaluate_row_pause(dst_id, G)
     local active_count = 0
-    for src_id = 1, 64 do
+    for src_id = 1, 66 do
         if G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active then
             active_count = active_count + 1
         end
     end
     local dst_node = G.nodes[dst_id]
     if dst_node and dst_node.type == "in" then
-        if active_count == 0 then engine.pause_matrix_row(dst_node.rx_idx - 1) else engine.resume_matrix_row(dst_node.rx_idx - 1) end
+        if active_count == 0 then engine.pause_matrix_row(dst_node.rx_idx) else engine.resume_matrix_row(dst_node.rx_idx) end
     end
 end
 
@@ -25,7 +22,7 @@ function Matrix.connect(src_id, dst_id, G)
         G.patch[src_id][dst_id].active = true; G.patch[src_id][dst_id].current_gain = 1.0
         local src_node = G.nodes[src_id]; local dst_node = G.nodes[dst_id]
         if src_node and dst_node and src_node.type == "out" and dst_node.type == "in" then
-            engine.resume_matrix_row(dst_node.rx_idx - 1); engine.patch_set(dst_node.rx_idx, src_node.tx_idx, 1.0)
+            engine.resume_matrix_row(dst_node.rx_idx); engine.patch_set(dst_node.rx_idx, src_node.tx_idx, 1.0)
         end
     end
 end
@@ -42,13 +39,13 @@ end
 
 function Matrix.init(G)
     clock.run(function()
-        for dst_id = 1, 64 do
+        for dst_id = 1, 66 do
             local dst_node = G.nodes[dst_id]
             if dst_node and dst_node.type == "in" then
                 local has_active = false; local row_vals = {}
-                for i = 1, 34 do row_vals[i] = 0.0 end
+                for i = 1, 37 do row_vals[i] = 0.0 end
                 
-                for src_id = 1, 64 do
+                for src_id = 1, 66 do
                     local src_node = G.nodes[src_id]
                     if src_node and src_node.type == "out" then
                         local is_active = G.patch[src_id] and G.patch[src_id][dst_id] and G.patch[src_id][dst_id].active
@@ -59,12 +56,12 @@ function Matrix.init(G)
                     end
                 end
                 engine.patch_row_set(dst_node.rx_idx, table.concat(row_vals, ","))
-                if has_active then engine.resume_matrix_row(dst_node.rx_idx - 1) else engine.pause_matrix_row(dst_node.rx_idx - 1) end
-                clock.sleep(0.002) -- FIX: Ceder hilo para evitar OSC Flooding
+                if has_active then engine.resume_matrix_row(dst_node.rx_idx) else engine.pause_matrix_row(dst_node.rx_idx) end
+                clock.sleep(0.002)
             end
         end
         
-        for i = 1, 64 do
+        for i = 1, 66 do
             local lvl = params:get("node_lvl_" .. i) or 0.0
             local node = G.nodes[i]
             if node then
