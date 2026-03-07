@@ -1,7 +1,7 @@
--- lib/screen_ui.lua v0.530
--- CHANGELOG v0.530:
--- 1. FIX: Menús contextuales (Hold) traducen los destinos CV a strings legibles.
--- 2. FIX: Nexus dividido en 3 páginas (Filtros, Master, Tape).
+-- lib/screen_ui.lua v0.531
+-- CHANGELOG v0.531:
+-- 1. FIX: Eliminada la lógica dinámica del Módulo 9 (ahora es solo Reverb).
+-- 2. FIX: Traducción de strings para los destinos CV en el menú Hold.
 
 local ScreenUI = {}
 ScreenUI.ping_flash = {[3] = 0}
@@ -10,11 +10,11 @@ local MenuDef = {
     [1] = { A = { title = "1023 - OSC 1", e1 = {id="m1_pwm1", name="PWM"}, e2 = {id="m1_tune1", name="TUNE"}, e3 = {id="m1_morph1", name="MORPH"}, e4 = {id="m1_fine1", name="FINE"}, k2 = {id="m1_range1", name=""}, k3 = {id="m1_out3_wave", name="WAVE"} }, B = { title = "1023 - OSC 2", e1 = {id="m1_pwm2", name="PWM"}, e2 = {id="m1_tune2", name="TUNE"}, e3 = {id="m1_morph2", name="MORPH"}, e4 = {id="m1_fine2", name="FINE"}, k2 = {id="m1_range2", name=""}, k3 = {id="m1_out4_wave", name="WAVE"} } },
     [2] = { A = { title = "STOCHASTIC NOISE", e1 = {id="m2_slow_rate", name="SLOW RT"}, e2 = {id="m2_tilt1", name="TILT 1"}, e3 = {id="m2_tilt2", name="TILT 2"}, k2 = {id="m2_type1", name="N1"}, k3 = {id="m2_type2", name="N2"} }, B = { title = "STOCHASTIC SLEW", e1 = {id="m2_slew_shape", name="SHAPE"}, e2 = {id="m2_rise", name="RISE"}, e3 = {id="m2_fall", name="FALL"}, k2 = {id="m2_cycle_mode", name="CYCLE"} }, C = { title = "STOCHASTIC S&H", e1 = {id="m2_glide", name="GLIDE"}, e2 = {id="m2_clk_rate", name="CLOCK"}, e3 = {id="m2_prob_skew", name="SKEW"}, k2 = {id="m2_clk_mode", name="SRC"} } },
     [3] = { A = { title = "SERGE VCFQ CORE", e1 = {id="m3_agc_drive", name="AGC DRV"}, e2 = {id="m3_cutoff", name="FREQ"}, e3 = {id="m3_q", name="RES"}, e4 = {id="m3_fine", name="FINE"}, k2 = {id="m3_range", name="RNG"}, k3 = {id="m3_ping", name="PING"} }, B = { title = "SERGE VCFQ MODS", e1 = {id="m3_ping_dcy", name="PING DCY"}, e2 = {id="m3_fm_amt", name="FM AMT"}, e3 = {id="m3_notch_bal", name="NOTCH"}, e4 = {id="m3_voct_amt", name="V/OCT"} } },
-    [4] = { A = { title = "1005 RING MOD", e1 = {id="m4_rm_am_mix", name="RM/AM"}, e2 = {id="m4_mod_gain", name="MOD"}, e3 = {id="m4_unmod_gain", name="UNMOD"}, e4 = {id="m4_xfade", name="XFADE"}, k2 = {id="m4_state", name="ST"} }, B = { title = "1005 VCA", e1 = {id="m4_gate_thresh", name="THRESH"}, e2 = {id="m4_vca_base", name="BASE"}, e3 = {id="m4_vca_resp", name="RESP"}, k2 = {id="m4_state", name="ST"} } },[5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },
+    [4] = { A = { title = "1005 RING MOD", e1 = {id="m4_rm_am_mix", name="RM/AM"}, e2 = {id="m4_mod_gain", name="MOD"}, e3 = {id="m4_unmod_gain", name="UNMOD"}, e4 = {id="m4_xfade", name="XFADE"}, k2 = {id="m4_state", name="ST"} }, B = { title = "1005 VCA", e1 = {id="m4_gate_thresh", name="THRESH"}, e2 = {id="m4_vca_base", name="BASE"}, e3 = {id="m4_vca_resp", name="RESP"}, k2 = {id="m4_state", name="ST"} } },
+    [5] = { A = { title = "CYBER VCA 1", e1 = {id="m5_env_gain", name="ENV GAIN"}, e2 = {id="m5_init_gain", name="BIAS"}, e3 = {id="m5_env_slew", name="ENV DCY"}, k2 = {id="m5_vca_curve", name="CRV"} } },
     [6] = { A = { title = "CYBER VCA 2", e1 = {id="m6_env_gain", name="ENV GAIN"}, e2 = {id="m6_init_gain", name="BIAS"}, e3 = {id="m6_env_slew", name="ENV DCY"}, k2 = {id="m6_vca_curve", name="CRV"} } },
     [7] = { A = { title = "CYBER VCA 3", e1 = {id="m7_env_gain", name="ENV GAIN"}, e2 = {id="m7_init_gain", name="BIAS"}, e3 = {id="m7_env_slew", name="ENV DCY"}, k2 = {id="m7_vca_curve", name="CRV"} } },
-    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },
-    [9] = { A = { title = "BLOOM REVERB", e1 = {id="m9_r_decay", name="DECAY"}, e2 = {id="m9_r_bloom", name="BLOOM"}, e3 = {id="m9_r_damp", name="DAMP"}, e4 = {id="m9_r_predelay", name="PREDLY"}, k3 = {id="m9_r_mod", name="MOD"} } },
+    [8] = { A = { title = "CYBER VCA 4", e1 = {id="m8_env_gain", name="ENV GAIN"}, e2 = {id="m8_init_gain", name="BIAS"}, e3 = {id="m8_env_slew", name="ENV DCY"}, k2 = {id="m8_vca_curve", name="CRV"} } },[9] = { A = { title = "BLOOM REVERB", e1 = {id="m9_r_decay", name="DECAY"}, e2 = {id="m9_r_bloom", name="BLOOM"}, e3 = {id="m9_r_damp", name="DAMP"}, e4 = {id="m9_r_predelay", name="PREDLY"}, k3 = {id="m9_r_mod", name="MOD"} } },
     [10] = { A = { title = "NEXUS FILTERS", e1 = {id="m10_cut_l", name="CUT L"}, e2 = {id="m10_res_l", name="RES L"}, e3 = {id="m10_cut_r", name="CUT R"}, e4 = {id="m10_res_r", name="RES R"}, k2 = {id="m10_filt_byp", name="FILT"} }, B = { title = "NEXUS MASTER", e1 = {id="m10_master_vol", name="VOL"}, e2 = {id="m10_drive", name="DRIVE"}, e3 = {id="thermal_drift", name="AGE"}, e4 = {id="m10_adc_slew", name="ADC SLW"}, k2 = {id="m10_adc_mon", name="ADC"} }, C = { title = "NEXUS TAPE", e1 = {id="m10_tape_time", name="TIME"}, e2 = {id="m10_tape_fb", name="FDBK"}, e3 = {id="m10_tape_tone", name="TONE"}, e4 = {id="m10_tape_wow", name="WOW"}, k2 = {id="m10_tape_mute", name="MUTE"} } }
 }
 
