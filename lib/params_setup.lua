@@ -1,8 +1,8 @@
--- lib/params_setup.lua v0.519
--- CHANGELOG v0.519:
--- 1. FIX FATAL: Corregido crash en init() causado por llamada a engine.m4_drive (nil). Redirigido a set_global_physics.
--- CHANGELOG v0.516:
--- 1. FIX: Añadidos parámetros de Space-Time Core (Mod 9) con mapeo exacto de Encoders.
+-- lib/params_setup.lua v0.524
+-- CHANGELOG v0.524:
+-- 1. FIX: m1_fm2_mode opciones actualizadas a {"LIN", "EXP", "MORPH"} para coincidir con VCO 1.
+-- 2. FIX: m2_type1 y m2_type2 opciones actualizadas para incluir "SlowWalk".
+-- 3. FIX: m9_r_predelay rango máximo aumentado a 1.0s con resolución de 0.001s.
 
 local Params = {}
 
@@ -41,7 +41,7 @@ function Params.init(G)
     params:add{type = "control", id = "m1_morph2", name = "Osc 2 Morph", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.001, 0.0), action = function(x) if not G.booting then engine.m1_morph2(x) end end}
     params:add{type = "option", id = "m1_range2", name = "Osc 2 Range", options = {"HI", "LO"}, default = 1, action = function(x) if not G.booting then engine.m1_range2(x - 1) end end}
     params:add{type = "option", id = "m1_pv2_mode", name = "Osc 2 PV Dest", options = {"PWM", "VOCT"}, default = 1, action = function(x) if not G.booting then engine.m1_pv2_mode(x - 1) end end}
-    params:add{type = "option", id = "m1_fm2_mode", name = "Osc 2 FM Dest", options = {"LIN", "EXP", "PWM"}, default = 2, action = function(x) if not G.booting then engine.m1_fm2_mode(x - 1) end end}
+    params:add{type = "option", id = "m1_fm2_mode", name = "Osc 2 FM Dest", options = {"LIN", "EXP", "MORPH"}, default = 2, action = function(x) if not G.booting then engine.m1_fm2_mode(x - 1) end end}
     params:add{type = "option", id = "m1_out4_wave", name = "Osc 2 Multi Wave", options = {"SINE", "TRI", "SAW", "SQR", "PULSE"}, default = 1, action = function(x) if not G.booting then engine.m1_out4_wave(x - 1) end end}
     add_node_params(1, 8)
 
@@ -50,8 +50,8 @@ function Params.init(G)
     params:add{type = "option", id = "m2_cv2_dest", name = "CV 2 Dest", options = {"RISE", "FALL", "CLOCK", "SLOW", "MORPH"}, default = 2, action = function(x) if not G.booting then engine.m2_cv2_dest(x - 1) end end}
     params:add{type = "control", id = "m2_tilt1", name = "Noise 1 Tilt", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_tilt1(x) end end}
     params:add{type = "control", id = "m2_tilt2", name = "Noise 2 Tilt", controlspec = controlspec.new(-1.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m2_tilt2(x) end end}
-    params:add{type = "option", id = "m2_type1", name = "Noise 1 Type", options = {"Pink", "White", "Crackle", "DigiRain", "Lorenz", "Grit"}, default = 1, action = function(x) if not G.booting then engine.m2_type1(x - 1) end end}
-    params:add{type = "option", id = "m2_type2", name = "Noise 2 Type", options = {"Pink", "White", "Crackle", "DigiRain", "Lorenz", "Grit"}, default = 2, action = function(x) if not G.booting then engine.m2_type2(x - 1) end end}
+    params:add{type = "option", id = "m2_type1", name = "Noise 1 Type", options = {"Pink", "White", "Crackle", "DigiRain", "Lorenz", "Grit", "SlowWalk"}, default = 1, action = function(x) if not G.booting then engine.m2_type1(x - 1) end end}
+    params:add{type = "option", id = "m2_type2", name = "Noise 2 Type", options = {"Pink", "White", "Crackle", "DigiRain", "Lorenz", "Grit", "SlowWalk"}, default = 2, action = function(x) if not G.booting then engine.m2_type2(x - 1) end end}
     params:add{type = "control", id = "m2_slow_rate", name = "Slow Rand Rate", controlspec = controlspec.new(0.01, 10.0, 'exp', 0.01, 0.1, "Hz"), action = function(x) if not G.booting then engine.m2_slow_rate(x) end end}
     params:add{type = "control", id = "m2_rise", name = "Slew Rise Time", controlspec = controlspec.new(0.001, 10.0, 'exp', 0.001, 0.1, "s"), action = function(x) if not G.booting then engine.m2_rise(x) end end}
     params:add{type = "control", id = "m2_fall", name = "Slew Fall Time", controlspec = controlspec.new(0.001, 10.0, 'exp', 0.001, 0.1, "s"), action = function(x) if not G.booting then engine.m2_fall(x) end end}
@@ -112,7 +112,7 @@ function Params.init(G)
     params:add{type = "control", id = "m9_r_decay", name = "Rev Decay", controlspec = controlspec.new(0.0, 1.1, 'lin', 0.01, 0.9), action = function(x) if not G.booting then engine.m9_r_decay(x) end end}
     params:add{type = "control", id = "m9_r_bloom", name = "Rev Bloom", controlspec = controlspec.new(0.01, 2.0, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_bloom(x) end end}
     params:add{type = "control", id = "m9_r_damp", name = "Rev Damp", controlspec = controlspec.new(200.0, 18000.0, 'exp', 0.01, 10000.0, "Hz"), action = function(x) if not G.booting then engine.m9_r_damp(x) end end}
-    params:add{type = "control", id = "m9_r_predelay", name = "Rev PreDelay", controlspec = controlspec.new(0.0, 0.2, 'lin', 0.001, 0.0, "s"), action = function(x) if not G.booting then engine.m9_r_predelay(x) end end}
+    params:add{type = "control", id = "m9_r_predelay", name = "Rev PreDelay", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.001, 0.0, "s"), action = function(x) if not G.booting then engine.m9_r_predelay(x) end end}
     params:add{type = "option", id = "m9_r_mod", name = "Rev Mod", options = {"OFF", "LIGHT", "DEEP", "CHAOS"}, default = 1, action = function(x) if not G.booting then engine.m9_r_mod(x - 1) end end}
     add_node_params(53, 56)
 
