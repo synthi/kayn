@@ -1,8 +1,7 @@
--- lib/params_setup.lua v0.524
--- CHANGELOG v0.524:
--- 1. FIX: m1_fm2_mode opciones actualizadas a {"LIN", "EXP", "MORPH"} para coincidir con VCO 1.
--- 2. FIX: m2_type1 y m2_type2 opciones actualizadas para incluir "SlowWalk".
--- 3. FIX: m9_r_predelay rango máximo aumentado a 1.0s con resolución de 0.001s.
+-- lib/params_setup.lua v0.530
+-- CHANGELOG v0.530:
+-- 1. FIX: Módulo 9 purificado a Bloom Reverb.
+-- 2. FIX: Tape Echo reintegrado al Nexus (Módulo 10).
 
 local Params = {}
 
@@ -101,14 +100,8 @@ function Params.init(G)
         add_node_params(37 + ((i-1)*4), 40 + ((i-1)*4))
     end
 
-    params:add_group("MOD 9: SPACE-TIME CORE", 16)
-    params:add{type = "option", id = "m9_mode", name = "Algorithm", options = {"TAPE", "REVERB"}, default = 1, action = function(x) if not G.booting then engine.m9_mode(x - 1); G.screen_dirty = true end end}
-    params:add{type = "option", id = "m9_cv_dest", name = "CV Dest", options = {"E1", "E2", "E3", "E4"}, default = 1, action = function(x) if not G.booting then engine.m9_cv_dest(x - 1) end end}
-    params:add{type = "control", id = "m9_t_drive", name = "Tape Drive", controlspec = controlspec.new(0.1, 5.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m9_t_drive(x) end end}
-    params:add{type = "control", id = "m9_t_time", name = "Tape Time", controlspec = controlspec.new(0.01, 4.0, 'lin', 0.01, 0.3, "s"), action = function(x) if not G.booting then engine.m9_t_time(x) end end}
-    params:add{type = "control", id = "m9_t_fb", name = "Tape Feedback", controlspec = controlspec.new(0.0, 1.2, 'lin', 0.01, 0.4), action = function(x) if not G.booting then engine.m9_t_fb(x) end end}
-    params:add{type = "control", id = "m9_t_wow", name = "Tape Wow", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m9_t_wow(x) end end}
-    params:add{type = "option", id = "m9_t_tone", name = "Tape Tone", options = {"18k", "8k", "4k", "1.5k"}, default = 1, action = function(x) if not G.booting then engine.m9_t_tone(x - 1) end end}
+    params:add_group("MOD 9: BLOOM REVERB", 10)
+    params:add{type = "option", id = "m9_cv_dest", name = "CV Dest", options = {"DECAY", "BLOOM", "DAMP", "PREDLY"}, default = 1, action = function(x) if not G.booting then engine.m9_cv_dest(x - 1) end end}
     params:add{type = "control", id = "m9_r_decay", name = "Rev Decay", controlspec = controlspec.new(0.0, 1.1, 'lin', 0.01, 0.9), action = function(x) if not G.booting then engine.m9_r_decay(x) end end}
     params:add{type = "control", id = "m9_r_bloom", name = "Rev Bloom", controlspec = controlspec.new(0.01, 2.0, 'lin', 0.01, 0.5), action = function(x) if not G.booting then engine.m9_r_bloom(x) end end}
     params:add{type = "control", id = "m9_r_damp", name = "Rev Damp", controlspec = controlspec.new(200.0, 18000.0, 'exp', 0.01, 10000.0, "Hz"), action = function(x) if not G.booting then engine.m9_r_damp(x) end end}
@@ -116,7 +109,7 @@ function Params.init(G)
     params:add{type = "option", id = "m9_r_mod", name = "Rev Mod", options = {"OFF", "LIGHT", "DEEP", "CHAOS"}, default = 1, action = function(x) if not G.booting then engine.m9_r_mod(x - 1) end end}
     add_node_params(53, 56)
 
-    params:add_group("MOD 10: NEXUS", 22)
+    params:add_group("MOD 10: NEXUS", 27)
     params:add{type = "control", id = "m10_master_vol", name = "Master Volume", controlspec = controlspec.new(-60.0, 12.0, 'lin', 0.5, 0.0, "dB"), action = function(x) if not G.booting then engine.m10_master_vol(math.pow(10, x / 20)) end end}
     params:add{type = "control", id = "m10_cut_l", name = "Master Cutoff L", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_l(x) end end}
     params:add{type = "control", id = "m10_cut_r", name = "Master Cutoff R", controlspec = controlspec.new(20.0, 18000.0, 'exp', 0.01, 18000.0, "Hz"), action = function(x) if not G.booting then engine.m10_cut_r(x) end end}
@@ -125,13 +118,18 @@ function Params.init(G)
     params:add{type = "control", id = "m10_drive", name = "Master Drive", controlspec = controlspec.new(1.0, 5.0, 'lin', 0.01, 1.0), action = function(x) if not G.booting then engine.m10_drive(x) end end}
     params:add{type = "option", id = "m10_filt_byp", name = "Nexus Filt Bypass", options = {"ON", "BYPASS"}, default = 1, action = function(x) if not G.booting then engine.m10_filt_byp(x - 1) end end}
     params:add{type = "option", id = "m10_adc_mon", name = "Nexus ADC Mon", options = {"OFF", "ON"}, default = 1, action = function(x) if not G.booting then engine.m10_adc_mon(x - 1) end end}
-    params:add{type = "option", id = "m10_cv_dest_l", name = "CV L Dest", options = {"VCA", "PAN", "VCF"}, default = 1, action = function(x) if not G.booting then engine.m10_cv_dest_l(x - 1) end end}
-    params:add{type = "option", id = "m10_cv_dest_r", name = "CV R Dest", options = {"VCA", "PAN", "VCF"}, default = 1, action = function(x) if not G.booting then engine.m10_cv_dest_r(x - 1) end end}
+    params:add{type = "option", id = "m10_cv_dest_l", name = "CV L Dest", options = {"VCA", "PAN", "VCF", "TIME", "FDBK"}, default = 1, action = function(x) if not G.booting then engine.m10_cv_dest_l(x - 1) end end}
+    params:add{type = "option", id = "m10_cv_dest_r", name = "CV R Dest", options = {"VCA", "PAN", "VCF", "TIME", "FDBK"}, default = 1, action = function(x) if not G.booting then engine.m10_cv_dest_r(x - 1) end end}
     params:add{type = "option", id = "m10_adc_mode_l", name = "ADC L Mode", options = {"AUDIO", "ENV"}, default = 1, action = function(x) if not G.booting then engine.adc_mode_l(x - 1) end end}
     params:add{type = "option", id = "m10_adc_mode_r", name = "ADC R Mode", options = {"AUDIO", "ENV"}, default = 1, action = function(x) if not G.booting then engine.adc_mode_r(x - 1) end end}
     params:add{type = "control", id = "m10_adc_slew", name = "ADC Env Slew", controlspec = controlspec.new(0.01, 2.0, 'exp', 0.01, 0.1, "s"), action = function(x) if not G.booting then engine.adc_slew(x) end end}
+    params:add{type = "control", id = "m10_tape_time", name = "Tape Time", controlspec = controlspec.new(0.01, 4.0, 'lin', 0.01, 0.3, "s"), action = function(x) if not G.booting then engine.m10_tape_time(x) end end}
+    params:add{type = "control", id = "m10_tape_fb", name = "Tape Feedback", controlspec = controlspec.new(0.0, 1.2, 'lin', 0.01, 0.4), action = function(x) if not G.booting then engine.m10_tape_fb(x) end end}
+    params:add{type = "control", id = "m10_tape_wow", name = "Tape Wow", controlspec = controlspec.new(0.0, 1.0, 'lin', 0.01, 0.0), action = function(x) if not G.booting then engine.m10_tape_wow(x) end end}
+    params:add{type = "option", id = "m10_tape_tone", name = "Tape Tone", options = {"18k", "8k", "4k", "1.5k"}, default = 1, action = function(x) if not G.booting then engine.m10_tape_tone(x - 1) end end}
+    params:add{type = "option", id = "m10_tape_mute", name = "Tape Mute", options = {"PLAY", "MUTE"}, default = 1, action = function(x) if not G.booting then engine.m10_tape_mute(x - 1) end end}
     
-    add_node_params(57, 64)
+    add_node_params(57, 66)
 end
 
 return Params
